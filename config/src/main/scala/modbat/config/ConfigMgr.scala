@@ -95,7 +95,6 @@ class ConfigMgr (progName: String, argName: String,
 	parseString(f, argName, envVal)
       }
     }
-
     if (test) {
       val testAnnotation = f.getAnnotation(classOf[Test])
       if (testAnnotation != null) {
@@ -239,6 +238,7 @@ class ConfigMgr (progName: String, argName: String,
       }
       case s: String => {
 	if (s.startsWith("--")) {
+
 	  return parseLongOption(s.substring(2))
 	} else if (s.startsWith("-") && s.length() > 1) {
 	  // TODO: Check for "-no-x" for shorthands with negation

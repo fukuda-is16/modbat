@@ -11,3 +11,4 @@ rootProject.name = 'modbat'
 
 include 'akka-mock-scheduler'
 include 'config'
+/* include 'paho' */

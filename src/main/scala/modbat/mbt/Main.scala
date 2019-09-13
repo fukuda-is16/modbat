@@ -43,7 +43,6 @@ object Main {
     }
 
     setup(modelClassName) // TODO: refactor into case code below once needed
-
     Modbat.init
     /* execute */
     config.mode match {
@@ -59,7 +58,6 @@ object Main {
     Log.setLevel(config.logLevel)
     MBT.enableStackTrace = config.printStackTrace
     MBT.maybeProbability = config.maybeProbability
-
     MBT.configClassLoader(config.classpath)
     MBT.loadModelClass(modelClassName)
     MBT.setRNG(config.randomSeed)

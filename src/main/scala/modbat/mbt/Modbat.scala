@@ -16,6 +16,7 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.LinkedHashMap
 import scala.collection.mutable.ListBuffer
+import scala.concurrent.duration._
 import scala.util.matching.Regex
 
 import modbat.cov.StateCoverage
@@ -133,6 +134,8 @@ object Modbat {
 	     passFailed(t.coverage.precond.precondPassed.get(idx)) +
 	     " at transition " +
 	     ppTrans(new RecordedTransition(modelInst, t)))
+
+
   }
 
   def preconditionCoverage {
@@ -142,6 +145,7 @@ object Modbat {
 	  t.coverage.precond.precondPassed.clone.asInstanceOf[BitSet]
 	diffSet.xor(t.coverage.precond.precondFailed)
 	var idx = diffSet.nextSetBit(0)
+
 	while (idx != -1) {
 	  warnPrecond(modelInst, t, idx)
 	  if (t.coverage.precond.precondFailed.get(idx)) {
@@ -229,7 +233,6 @@ object Modbat {
     }
 
     runTests(n)
-
     coverage
     appState = AppShutdown
     shutdown
@@ -373,7 +376,11 @@ object Modbat {
         }
         if (result.isEmpty && !staying.isEmpty) {
           MBT.time.scheduler.timeUntilNextTask match {
-            case Some(s) => MBT.time.advance(s)
+            case Some(s) => {
+              if(s > 0.millis) {
+                MBT.time.advance(s)
+              } else MBT.time.scheduler.tick()
+            }
             case None => throw new NoTaskException()
           }
           return allSuccessors(givenModel)
@@ -381,14 +388,6 @@ object Modbat {
       }
     } else {
       if (givenModel.joining == null) {
-/*        MBT.stayLock.synchronized {
-//          MBT.stayLock.wait()
-          MBT.time.scheduler.timeUntilNextTask match {
-            case Some(s) => MBT.time.advance(s)
-            case None => throw new NoTaskException()
-          }
-        }
-*/
         addSuccessors(givenModel, result)
       }
     }

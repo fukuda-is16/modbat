@@ -7,11 +7,11 @@ import java.io.PrintStream
 
 object ModbatTestHarness {
   def testMain(args: Array[String], env: () => Unit): (Int, List[String], List[String]) = {
+
     env()
     val out: ByteArrayOutputStream = new ByteArrayOutputStream()
     val err: ByteArrayOutputStream = new ByteArrayOutputStream()
     var ret = 0
-
     Console.withErr(err) {
       Console.withOut(out) {
         ret = Main.run(args)
