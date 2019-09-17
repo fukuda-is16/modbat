@@ -15,6 +15,9 @@ class Action(val transfunc: () => Any, val method: Method = null) {
   var immediate = false // if true, do not switch between model
   // instances for next step; immediately execute this model again
   var stayTime: Option[(Int, Int)] = None
+  var waitTime: Option[(Int, Int)] = None
+  //subscribe
+  var subTopic: Option[String] = None
 
   def nonDetExceptions = nonDetExc.toList
 
@@ -68,6 +71,20 @@ class Action(val transfunc: () => Any, val method: Method = null) {
 
   def stay(times: (Int, Int)): Action = {
     stayTime = Some(times)
+    this
+  }
+
+  def timeout(time: Int): Action = {
+    timeout(time, time)
+  }
+
+  def timeout(times: (Int, Int)): Action = {
+    waitTime = Some(times)
+    this
+  }
+
+  def subscribe(topic: String): Action = {
+    subTopic = Some(topic)
     this
   }
 
