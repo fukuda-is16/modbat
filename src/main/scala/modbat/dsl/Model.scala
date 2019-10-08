@@ -43,8 +43,6 @@ abstract trait Model {
 
   var efsm: MBT = null
 
-  def getCurrentState = efsm.getCurrentState
-
   def getRandomSeed() = MBT.getRandomSeed
 
   def testFailed() = MBT.testFailed
@@ -115,4 +113,6 @@ abstract trait Model {
     efsm.invokeTransition(label)
   }
 
+  var instanceNum: Int = 1
+  def setInstanceNum(n: Int) = {instanceNum = n}
 }

@@ -62,7 +62,7 @@ class Configuration extends modbat.config.Configuration {
   @Choice(value = Array("none", "error", "warning", "info",
 		        "fine", "debug", "all"),
 	  definedIn = "modbat.log.Log")
-  var logLevel = Log.Info
+  var logLevel = Log.Debug//Log.Info
     // for messages from modbat
 
   @Doc("random seed for initial test")

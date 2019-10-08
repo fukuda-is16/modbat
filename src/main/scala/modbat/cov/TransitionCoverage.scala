@@ -13,6 +13,7 @@ import modbat.trace.RecordedTransition
 import modbat.trace.TransitionResult
 
 object TransitionCoverage {
+
   def cover(model: MBT, t: Transition, nextState: Transition = null,
 	    excType: String = null, sameAgain: Boolean = false) = {
     assert (t.coverage != null,
@@ -27,11 +28,33 @@ object TransitionCoverage {
     (Ok(sameAgain), new RecordedTransition(model, t, null, nextState, excType))
   }
 
+  def coverDistribution(model: MBT, t: Transition, n: Int, nextState: Transition = null,
+	    excType: String = null, sameAgain: Boolean = false) = {
+    assert (t.coverage != null,
+	    { "No coverage object for transition " + t.toString })
+    if (nextState == null) {
+      setCoverageAndStateDistribution(t, model, n)
+    } else {
+      setCoverageAndStateDistribution(nextState, model, n)
+    }
+    // do not use stack trace information as call has already happened
+    // so that information is no longer directly available
+    (Ok(sameAgain), new RecordedTransition(model, t, null, nextState, excType))
+  }
+
   def setCoverageAndState(t: Transition, model: MBT) {
     t.coverage.cover
     StateCoverage.cover(t.dest)
     assert (model != null)
-    model.currentState = t.dest
+//    model.currentState = t.dest
+  }
+
+  def setCoverageAndStateDistribution(t: Transition, model: MBT, n: Int) {
+    t.coverage.cover
+    StateCoverage.cover(t.dest)
+    assert (model != null)
+    t.origin.reduceInstances(n)
+    t.dest.assignInstances(n)
   }
 
   def reuseCoverageInfo(instance: MBT, master: MBT, className: String) {

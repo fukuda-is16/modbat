@@ -47,6 +47,7 @@ import modbat.util.CloneableRandom
 import modbat.util.Random
 
 import com.miguno.akka.testing.VirtualTime
+import scala.concurrent.duration._
 
 //import com.miguno.akka.testing.VirtualTime
 /** Contains core functionality for loading and running model.
@@ -78,7 +79,6 @@ object MBT {
   val warningIssuedOn = new HashSet[Object]()
   // do not issue same warning twice for static model problem
   var currentTransition: Transition = null
-  val stayLock = new AnyRef()
   val time = new VirtualTime
 
   def init {
@@ -359,7 +359,6 @@ class MBT (val model: Model, val trans: List[Transition]) {
   var states = HashMap[String, State]()
   val transitions = new ListBuffer[Transition]()
   var initialState: State = null
-  var currentState: State = null
   var name = setModelName
   /* number of nextIf transition taken, -1 if none taken */
   var expectedOverrideTrans = -1
@@ -367,8 +366,7 @@ class MBT (val model: Model, val trans: List[Transition]) {
   var isObserver = false
   var joining: MBT = null
   val tracedFields = new TracedFields(getTracedFields, model)
-  @volatile var staying = false
-
+  var instanceNum: Int = 1
   /* isChild is true when coverage information of initial instance is
    * to be re-used; this is the case when a child is launched, but also
    * when a model instance is created again after the first test run. */
@@ -377,8 +375,6 @@ class MBT (val model: Model, val trans: List[Transition]) {
       regTrans(tr, isChild)
     }
   }
-
-  def getCurrentState = currentState.name
 
   def getModel() = model
 
@@ -435,7 +431,7 @@ class MBT (val model: Model, val trans: List[Transition]) {
   def addAndLaunch(firstLaunch: Boolean) = {
     if (Modbat.firstInstance.contains(className)) {
       val master =
-	initChildInstance(className, trans.toArray)
+	     initChildInstance(className, trans.toArray)
       regSynthTrans(true)
       registerStateSelfTrans(model, true)
       TransitionCoverage.reuseCoverageInfo(this, master, className)
@@ -446,6 +442,7 @@ class MBT (val model: Model, val trans: List[Transition]) {
       registerStateSelfTrans(model, false)
     }
     model.efsm = this
+    instanceNum = model.instanceNum
     MBT.prepare(model)
     Log.fine("Launching new model instance " + name + "...")
     if (model.isInstanceOf[Observer]) {
@@ -458,7 +455,7 @@ class MBT (val model: Model, val trans: List[Transition]) {
     }
     MBT.launchedModels += this
     MBT.launchedModelInst += model
-    currentState = initialState
+    initialState.assignInstances(instanceNum)
     StateCoverage.cover(initialState)
     this
   }
@@ -505,7 +502,7 @@ class MBT (val model: Model, val trans: List[Transition]) {
     for (m <- methods) {
       val annotation = m.getAnnotation(classOf[States])
       if (annotation != null) {
-	registerTrans(model, m, annotation, isChild)
+      	registerTrans(model, m, annotation, isChild)
       }
     }
   }
@@ -515,8 +512,8 @@ class MBT (val model: Model, val trans: List[Transition]) {
     val params = m.getParameterTypes
     if (params.length != 0) {
       if (!MBT.warningIssued(m)) {
-	Log.warn("Ignoring method " + m +
-		 ", which has @State annotation but more than zero arguments.")
+      	Log.warn("Ignoring method " + m +
+		     ", which has @State annotation but more than zero arguments.")
       }
     } else {
       registerTransForStates(model, m, annotation, isChild)
@@ -544,22 +541,23 @@ class MBT (val model: Model, val trans: List[Transition]) {
     val exceptions = m.getAnnotation(classOf[Throws])
     for (state <- transStates) {
       if (states.contains(state)) {
-	Log.debug("Registering \"" + state + "\" -> \"" + state + "\" := "
-		  + m.getName)
-	val st = states(state)
+      	Log.debug("Registering \"" + state + "\" -> \"" + state + "\" := "
+		      + m.getName)
+	      val st = states(state)
+        //TODO:ここの解釈！！！！！！invokeMethodからaction出てきたの謎すぎる
         val wrapper = { () => MBT.invokeMethod(m, model) }
-	val action = new Action(wrapper, m)
-	action.weight = weight
-	if (exceptions != null) {
-	  action.throws(exceptions.value())
-	}
-	val t = new Transition(st, st, false, action, false)
-	regTrans(t, isChild, true)
+	      val action = new Action(wrapper, m)
+	      action.weight = weight
+	      if (exceptions != null) {
+	        action.throws(exceptions.value())
+	      }
+	      val t = new Transition(st, st, false, action, false)
+	      regTrans(t, isChild, true)
       } else {
-	if (!MBT.warningIssued((state, m))) {
-	  Log.warn("Ignoring non-existent state " + state +
-		   " from @State annotation for " + m.getName)
-	}
+	      if (!MBT.warningIssued((state, m))) {
+	        Log.warn("Ignoring non-existent state " + state +
+		        " from @State annotation for " + m.getName)
+	      }
       }
     }
     assert(Transition.pendingTransitions.isEmpty)
@@ -600,18 +598,21 @@ class MBT (val model: Model, val trans: List[Transition]) {
 	       ignoreDuplicates: Boolean = false) {
     tr.origin = uniqueState(tr.origin)
     tr.dest = uniqueState(tr.dest)
+
+    tr.origin.addTransition(tr)
+    tr.origin.viewTransitions
     Log.debug (name + ": Registered state transition from " + tr.origin +
 	      " to " + tr.dest)
     if (MBT.checkDuplicates && !ignoreDuplicates) {
       val label = tr.action.label
       if (!label.isEmpty) {
-	val duplicates =
-	  transitions filter (t => t.action.label.equals(label))
-	if (duplicates.length != 0) {
-	  if (!MBT.warningIssued(label)) {
-	    Log.warn ("Duplicate transition label \"" + label + "\".")
-	  }
-	}
+	      val duplicates =
+	      transitions filter (t => t.action.label.equals(label))
+	      if (duplicates.length != 0) {
+	        if (!MBT.warningIssued(label)) {
+	          Log.warn ("Duplicate transition label \"" + label + "\".")
+	        }
+      	}
       }
     }
     transitions += tr
@@ -689,25 +690,25 @@ class MBT (val model: Model, val trans: List[Transition]) {
     if (!expected(successor.expectedExceptions, e)) {
       val excTrans = nonDetExc(successor.nonDetExceptions, e)
       if (excTrans eq null) {
-	Log.warn(e + " occurred, aborting.")
-	printStackTraceIfEnabled(e)
-	val fName = successor.action.transfunc.getClass.getName
-	if (fName.startsWith("modbat.mbt") ||
-	    fName.startsWith("scala.Predef")) {
-	  val func = findModelFunction(e.getStackTrace)
-	  return (ExceptionOccurred(e.toString),
-		  new RecordedTransition(this, successor, func,
+      	Log.warn(e + " occurred, aborting.")
+	      printStackTraceIfEnabled(e)
+      	val fName = successor.action.transfunc.getClass.getName
+      	if (fName.startsWith("modbat.mbt") ||
+	        fName.startsWith("scala.Predef")) {
+	        val func = findModelFunction(e.getStackTrace)
+	        return (ExceptionOccurred(e.toString),
+		       new RecordedTransition(this, successor, func,
 					 null, e.getClass.getName))
-	}
-	val func =
-	  findMatchingFunction(e.getStackTrace, successor.action.transfunc)
-	return (ExceptionOccurred(e.toString),
-		new RecordedTransition(this, successor, func,
+      	}
+	      val func =
+	       findMatchingFunction(e.getStackTrace, successor.action.transfunc)
+	       return (ExceptionOccurred(e.toString),
+		     new RecordedTransition(this, successor, func,
 				       null, e.getClass.getName))
       }
       Log.fine(e + " leads to exception state " + excTrans.dest + ".")
       if (successor.action.immediate) {
-	Log.fine("Next transition on this model must be taken immediately.")
+	      Log.fine("Next transition on this model must be taken immediately.")
       }
       return TransitionCoverage.cover(this, successor, excTrans,
 				      e.getClass.getName,
@@ -753,22 +754,39 @@ class MBT (val model: Model, val trans: List[Transition]) {
     TransitionCoverage.cover(this, trans)
   }
 
-  def successors(quiet: Boolean): List[Transition] = {
-    if (!quiet) {
-      Log.debug (name + ": Current state: " + currentState)
-    }
-    val successorTrs =
-       transitions.toList.filter (t => !t.isSynthetic &&
-				  t.origin == currentState)
-
-    if (Log.isLogging(Log.Debug)) {
-      for (trans <- successorTrs) {
-	if (!quiet) {
-	  Log.debug(name + ": Possible successor: " + trans.dest)
-	}
+  def checkNextStPredN(trans: Transition, n: Int):
+    (TransitionResult, RecordedTransition) = {
+    for (nextSt <- trans.nextStatePredicates) {
+      if (!(nextSt.nonDet) ||
+	  (MBT.rng.nextFloat(true) < MBT.maybeProbability)) {
+      	val envCallResult = nextSt.action() // result of "nextIf" condition
+	      Log.debug("Call to nextIf returns " + envCallResult + ".")
+	      // remember outcome of RNG if next state predicate should be checked
+	      // record outcome of nextSt.action() and check for consistency
+	      // during replay
+	      val transition = nextSt.target
+	      if (envCallResult) {
+	        if (!MBT.isOffline || (expectedOverrideTrans == transition.n)) {
+	          Log.fine("Next state predicate" +
+		         transNumToString(transition.n) +
+		         " holds, go to state " +
+		         transition.dest + ".")
+	          expectedOverrideTrans = -1
+	          return TransitionCoverage.coverDistribution(this, trans, n)
+	        }
+      	}
       }
     }
-    successorTrs
+    TransitionCoverage.coverDistribution(this, trans, n)
+  }
+  //list of states that have at least one feasible transition 
+  def successorStates: List[State] = {
+    var result: List[State] = List.empty
+    for(s <- states) {
+      val st:State = s._2
+      if(!st.availableTransitions.isEmpty && st.instanceNum > 0) result = st :: result
+    }
+    result
   }
 
   def getTransition(i: Int) = transitions(i)
@@ -789,51 +807,41 @@ class MBT (val model: Model, val trans: List[Transition]) {
   }
 
   /* returns result of transition function and next state (if available) */
-  def executeTransition(successor: Transition):
+  def executeTransitionRepeat(successor: Transition, n: Int):
     (TransitionResult, RecordedTransition) = {
     if (!MBT.isOffline) {
-      Log.fine(name + ": Executing transition " + successor + "...")
+      Log.fine(name + ": Executing transition " + successor + " " + n + "times...")
     }
     if (successor.action.transfunc ne null) {
       try {
-	MBT.currentTransition = successor
-	TransitionCoverage.prep(successor)
-	successor.action.transfunc()
-        successor.action.stayTime match {
-          case Some((t1, t2)) => {
-            MBT.stayLock.synchronized {
-              staying = true
-            }
-            val stayTime = (if (t1 == t2) t1 else rng.choose(t1, t2)).asInstanceOf[Long]
-            val wakeUp = new WakeUp()
-            MBT.time.scheduler.scheduleOnce(stayTime.millis)(wakeUp.run)
-          }
-          case _ => ()
-        }
-	if (!successor.expectedExceptions.isEmpty) {
-	  Log.warn("Expected exception did not occur, aborting.")
-	  (ExpectedExceptionMissing, new RecordedTransition(this, successor))
-	} else {
-	  checkNextStPred(successor)
-	}
+	      TransitionCoverage.prep(successor)
+        //TODO: think another implementation to execute transfunc()?
+        for (i <- 1 to n) successor.action.transfunc()
+	      if (!successor.expectedExceptions.isEmpty) {
+	        Log.warn("Expected exception did not occur, aborting.")
+	        (ExpectedExceptionMissing, new RecordedTransition(this, successor))
+      	} else {
+	        checkNextStPredN(successor, n)
+	      }
       } catch {
-	case reqFailed: RequirementFailedException => {
-	  handleReqFailure(reqFailed, successor)
-	}
-	case illarg: IllegalArgumentException => {
-	  val msg = illarg.getMessage
-	  if (!MBT.precondAsFailure && (msg != null) &&
-	      (msg.startsWith("requirement failed"))) {
-	    handleReqFailure(illarg, successor)
-	  } else { // treat precond. failure like normal exception
-	    handle(illarg, successor)
-	  }
-	}
-	case e: Throwable => handle(e, successor)
+        //TODO: support require() (distribution ver.)
+      	case reqFailed: RequirementFailedException => {
+	        handleReqFailure(reqFailed, successor)
+	      }
+	      case illarg: IllegalArgumentException => {
+	        val msg = illarg.getMessage
+	        if (!MBT.precondAsFailure && (msg != null) &&
+	          (msg.startsWith("requirement failed"))) {
+	          handleReqFailure(illarg, successor)
+	        } else { // treat precond. failure like normal exception
+	          handle(illarg, successor)
+	        }
+	      }
+        case e: Throwable => handle(e, successor)
       }
     } else {
       Log.debug("Empty transition action.")
-      checkNextStPred(successor)
+      checkNextStPredN(successor, n)
     }
   }
 
@@ -872,7 +880,7 @@ class MBT (val model: Model, val trans: List[Transition]) {
   def invokeTransition(label: String): Unit = {
     MBT.transitionQueue.enqueue((this, label))
   }
-
+/*
   class WakeUp() extends Thread {
     override def run() {
       MBT.stayLock.synchronized {
@@ -881,4 +889,5 @@ class MBT (val model: Model, val trans: List[Transition]) {
       Log.fine(name + ": Finished staying.")
     }
   }
+*/
 }

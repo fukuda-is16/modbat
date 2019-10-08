@@ -2,16 +2,22 @@
 MODBAT_PATH := ..
 MODBAT := $(MODBAT_PATH)/build/modbat.jar
 OPTION := -n=1 --log-path=./log
-MODEL := FirstTest
+MODEL := CounterTest
 
 all:
 	cd $(MODBAT_PATH); ./gradlew build -x test
 	-zip -d $(MODBAT) META-INF/ECLIPSE_.RSA META-INF/ECLIPSE_.SF
-	make mqtttest
-mqtttest: $(MODBAT) $(MODEL).scala
+	make test
+modbat:
+	cd $(MODBAT_PATH); ./gradlew build -x test
+	-zip -d $(MODBAT) META-INF/ECLIPSE_.RSA META-INF/ECLIPSE_.SF
+test: $(MODBAT) $(MODEL).scala
 	scalac -cp $(MODBAT) $(MODEL).scala
+
 .PHONY: run cleanlog
 run:
+	-@make cleanlog
 	scala -cp .:$(MODBAT) $(MODBAT) $(OPTION) $(MODEL)
 cleanlog:
-	find -name "*.log" | xargs rm
+	-@find -name "*.log" | xargs rm
+	-@find -name "*.err" | xargs rm

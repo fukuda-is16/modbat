@@ -10,6 +10,7 @@ import java.lang.reflect.Modifier
 import java.lang.RuntimeException
 import java.net.URL
 import java.util.BitSet
+import java.util.Random
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
@@ -251,15 +252,18 @@ object Modbat {
   def wrapRun = {
     Console.withErr(err) {
       Console.withOut(out) {
-	 val model = MBT.launch(null)
-	 val result = exploreModel(model)
-	 MBT.cleanup()
-	 result
+	      val model = MBT.launch(null)
+	      val result = exploreModel(model)
+	      MBT.cleanup()
+	      result
       }
     }
   }
 
   def runTest = {
+    printf("arrived runTest")
+    Log.error("runTest log.error")
+    Log.debug("runTest log.debug")
     MBT.clearLaunchedModels
     MBT.testHasFailed = false
     wrapRun
@@ -274,34 +278,34 @@ object Modbat {
       randomSeed = getRandomSeed
       val seed = randomSeed.toHexString
       failed match {
-	case 0 => Console.printf("%8d %16s", i, seed)
-	case 1 => Console.printf("%8d %16s, one test failed.", i, seed)
-	case _ => Console.printf("%8d %16s, %d tests failed.",
+      	case 0 => Console.printf("%8d %16s", i, seed)
+	      case 1 => Console.printf("%8d %16s, one test failed.", i, seed)
+	      case _ => Console.printf("%8d %16s, %d tests failed.",
 				 i, seed, failed)
       }
       logFile = Main.config.logPath + "/" + seed + ".log"
       errFile = Main.config.logPath + "/" + seed + ".err"
       if (Main.config.redirectOut) {
-	out = new PrintStream(new FileOutputStream(logFile))
-	System.setOut(out)
-
-	err = new PrintStream(new FileOutputStream(errFile), true)
-	System.setErr(err)
+	      out = new PrintStream(new FileOutputStream(logFile))
+    	  System.setOut(out)
+	      err = new PrintStream(new FileOutputStream(errFile), true)
+      	System.setErr(err)
       } else {
-	Console.println
+      	Console.println
       }
       MBT.checkDuplicates = (i == 1)
       val result = runTest
+      printf("runTest end\n")
       count = i
       restoreChannels
       if (TransitionResult.isErr(result)) {
 	failed += 1
       } else {
-	assert (result == Ok())
+      	assert (result == Ok())
       }
       masterRNG.nextInt(false) // get one iteration in RNG
       if (TransitionResult.isErr(result) && Main.config.stopOnFailure) {
-	return
+	      return
       }
     }
   }
@@ -339,78 +343,36 @@ object Modbat {
     retVal
   }
 
-  def addSuccessors(m: MBT, result: ArrayBuffer[(MBT, Transition)],
-		    quiet: Boolean = false) {
-    for (s <- m.successors(quiet)) {
-      if (!quiet) {
-	Log.debug("State " + s.dest +
-		  " in model " + m.name + " was visited " +
-		  timesVisited.getOrElseUpdate(RecordedState(m, s.dest), 0)
-		  + " times.")
-      }
-      val limit = Main.config.loopLimit
-      if ((limit != 0) &&
-	  (timesVisited.getOrElseUpdate(RecordedState(m, s.dest), 0)
-	   >= limit)) {
-	if (!quiet) {
-	  Log.fine("Detected beginning of loop " + limit + 
-		   " (model " + m.name + ", state " + s.dest +
-		   "), filtering transition " + s + ".")
-	}
-      } else {
-	val succ = (m, s)
-	result += succ
-      }
-    }
+  def addSuccStates(m: MBT, result: ArrayBuffer[(MBT, State)]) {
+    //TODO: print log if !quiet 
+    //TODO: support loop detection (as supported in addSuccessors)
+    for(s <- m.successorStates) result += Tuple2(m, s)
   }
 
-  def allSuccessors(givenModel: MBT): Array[(MBT, Transition)] = {
-    val result = new ArrayBuffer[(MBT, Transition)]()
+  def allSuccStates(givenModel: MBT): Array[(MBT, State)] = {
+    val result = new ArrayBuffer[(MBT, State)]()
     if (givenModel == null) {
-      MBT.stayLock.synchronized {
-        // TODO: allow selection to be overridden by invokeTransition
-        val (staying, notStaying) = MBT.launchedModels partition (_.staying)
-        for (m <- notStaying filterNot (_ isObserver)
-          filter (_.joining == null)) {
-          addSuccessors(m, result)
-        }
-        if (result.isEmpty && !staying.isEmpty) {
-          MBT.time.scheduler.timeUntilNextTask match {
-            case Some(s) => {
-              if(s > 0.millis) {
-                MBT.time.advance(s)
-              } else MBT.time.scheduler.tick()
-            }
-            case None => throw new NoTaskException()
+      for (m <- MBT.launchedModels filterNot (_ isObserver) filter (_.joining == null)) {
+        addSuccStates(m, result)
+      }
+
+      if (result.isEmpty) {
+        MBT.time.scheduler.timeUntilNextTask match {
+          case Some(s) => {
+            if(s > 0.millis) {
+              MBT.time.advance(s)
+            } else MBT.time.scheduler.tick()
           }
-          return allSuccessors(givenModel)
+          case None => return Array.empty
         }
+        return allSuccStates(givenModel)
       }
     } else {
       if (givenModel.joining == null) {
-        addSuccessors(givenModel, result)
+        addSuccStates(givenModel, result)
       }
     }
     result.toArray
-  }
-
-  def totalWeight(trans: Array[(MBT, Transition)]) = {
-    var w = 0.0
-    for (t <- trans) {
-      w = w + t._2.action.weight
-    }
-    w
-  }
-
-  def weightedChoice(choices: Array[(MBT, Transition)], totalW: Double) = {
-    val n = (totalW * MBT.rng.nextFloat(false))
-    var w = choices(0)._2.action.weight
-    var i = 0
-    while (w < n) {
-      i = i + 1
-      w = w + choices(i)._2.action.weight
-    }
-    choices(i)
   }
 
   def updateExecHistory(model: MBT,
@@ -455,154 +417,36 @@ object Modbat {
       }
     }
   }
-
   def exploreSuccessors: (TransitionResult, RecordedTransition) = {
-    var successors = allSuccessors(null)
-    var allSucc = successors.clone
-    var totalW = totalWeight(successors)
-    var backtracked = false
-    while (!successors.isEmpty && (totalW > 0 || !MBT.transitionQueue.isEmpty)) {
-      /* Pop invokeTransition queue until a feasible transition is popped.
-       * If there is, execute it.
-       * Otherwise, if total weight > 0, choose one transition by weight and execute it. */
-      val localStoredRNGState = MBT.rng.asInstanceOf[CloneableRandom].clone
+    var succStates: Array[(MBT, State)] = allSuccStates(null)
 
-      if (MBT.rng.nextFloat(false) < Main.config.abortProbability) {
-	Log.debug("Aborting...")
-	return (Ok(), null)
+    //while (!successors.isEmpty && (totalW > 0 || !MBT.transitionQueue.isEmpty)) {
+    while(!succStates.isEmpty) {
+      //successor(transition)であったところを、succStateに替える
+      //succStateのfeasibleInstancesを実行していく
+      val rand = new Random(System.currentTimeMillis())
+      val successorState = succStates(rand.nextInt(succStates.length))
+      //successorStateの(遷移,instance個数)の組ごとにexecuteTransition
+      //stateのinstanceNumの移動もexecuteTransition内で行う
+      val model = successorState._1
+      val fI:List[(modbat.dsl.Transition, Int)] = successorState._2.feasibleInstances
+      successorState._2.feasibleInstances = List.empty
+      Log.debug("fI.isEmpty = "+ fI.isEmpty)
+      for(ins <- fI) {
+        val trans: Transition = ins._1
+        val n: Int = ins._2
+        model.executeTransitionRepeat(trans, n)
+        fI
       }
-
-      //invokeTransition
-      var successor: (MBT, Transition) = null
-      if(!MBT.transitionQueue.isEmpty) Log.debug("Current InvokeTransitionQueue = (" + MBT.transitionQueue.mkString + ")")
-
-      while (!MBT.transitionQueue.isEmpty && successor == null) {
-        val (model, label) = MBT.transitionQueue.dequeue
-        val trs = model.transitions.filter(_.action.label == label)
-          .filter(_.origin == model.currentState)
-        if(trs.size != 1) {
-          Log.warn(s"${label} matches ${trs.size} transitions")
-        } else {
-          successor = (model, trs.head)
-        }
-      }
-      if (successor == null && totalW > 0) {
-        successor = weightedChoice(successors, totalW)
-      }
-      if(successor != null) {
-        val model = successor._1
-        val trans = successor._2
-        assert (!trans.isSynthetic)
-        // TODO: Path coverage
-        val result = model.executeTransition(trans)
-        var updates: List[(Field, Any)] = Nil
-        updates  = model.tracedFields.updates
-        for (u <- updates) {
-	  Log.fine("Trace field " + u._1 + " now has value " + u._2)
-        }
-        updateExecHistory(model, localStoredRNGState, result, updates)
-        result match {
-          case (Ok(sameAgain: Boolean), _) => {
-	    val succ = new ArrayBuffer[(MBT, Transition)]()
-	    addSuccessors(model, succ, true)
-	    if (succ.size == 0) {
-	      Log.debug("Model " + model.name + " has terminated.")
-	      // Unblock all models that are joining this one.
-	      for (m <- MBT.launchedModels filter (_.joining == model)) {
-	        m.joining = null
-	      }
-	    }
-	    if (otherThreadFailed) {
-	      return (ExceptionOccurred(MBT.externalException.toString), null)
-	    }
-	    if (sameAgain) {
-	      successors = allSuccessors(model)
-	    } else {
-	      successors = allSuccessors(null)
-	    }
-	    val observerResult = updateObservers
-	    if (TransitionResult.isErr(observerResult)) {
-	      return (observerResult, result._2)
-	    }
-	    if (otherThreadFailed) {
-	      return (ExceptionOccurred(MBT.externalException.toString), null)
-	    }
-	    backtracked = false
-	    allSucc = successors.clone
-	  }
-          case (Backtrack, _) => {
-	    successors = successors filterNot (_ == successor)
-	    backtracked = true
-	  }
-          case (t: TransitionResult, _) => {
-	    assert(TransitionResult.isErr(t))
-	    printTrace(executedTransitions.toList)
-	    return result
-	  }
-        }
-        totalW = totalWeight(successors)
-      }
+      succStates = allSuccStates(null)
     }
-    if (successors.isEmpty && backtracked) {
-      for (succ <- allSucc) {
-	Log.warn("All preconditions false at transition " +
-		 ppTrans(new RecordedTransition(succ._1, succ._2)))
-      }
-      Log.warn("Maybe the preconditions are too strict?")
-    }
+  
     Log.debug("No more successors.")
-    if ((MBT.launchedModels filter (_.joining != null)).size != 0) {
-      Log.warn("Deadlock: Some models stuck waiting for another model to finish.")
-      for (m <- MBT.launchedModels filter (_.joining != null)) {
-	val trans = (executedTransitions filter (_.model eq m)).last
-	Log.warn(m.name + ": " + ppTrans(trans))
-      }
-    }
     Transition.pendingTransitions.clear
     // in case a newly constructed model was never launched
+    printf("exploreSuccessors.return\n")
     return (Ok(), null)
   }
-
-  def updateObservers: TransitionResult = {
-    for (observer <- MBT.launchedModels filter (_ isObserver)) {
-      assert(observer.isObserver)
-      val observerResult = updateObserver(observer)
-      if (TransitionResult.isErr(observerResult)) {
-	return observerResult
-      }
-    }
-    Ok()
-  }
-
-  /* Observer update. This is not an instance method in MBT because
-     it is only used in online mode (observer transitions are also
-     recorded and normally replayed in offline mode). */
-  def updateObserver(observer: MBT): TransitionResult = {
-    val observedStates = new HashSet[State]()
-    var result: TransitionResult = Ok()
-    while (!observedStates.contains(observer.currentState)) {
-      observedStates += observer.currentState
-      result = executeObserverStep(observer)
-    }
-    result
-  }
-
-  def executeObserverStep(observer: MBT): TransitionResult = {
-    for (trans <- observer.successors(false)) {
-      assert (!trans.isSynthetic)
-      val localStoredRNGState = MBT.rng.asInstanceOf[CloneableRandom].clone
-      val result = observer.executeTransition(trans)
-      Modbat.updateExecHistory(observer, localStoredRNGState, result, Nil)
-      if (TransitionResult.isErr(result._1)) {
-	printTrace(executedTransitions.toList)
-      }
-      if (result._1 != Backtrack) {
-	return result._1
-      }
-    }
-    Ok() // ignore case where no transition executes
-  }
-
 
   def sourceInfo(action: Action, recordedAction: StackTraceElement) = {
     if (recordedAction != null) {

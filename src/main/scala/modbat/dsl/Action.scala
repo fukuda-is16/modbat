@@ -14,7 +14,6 @@ class Action(val transfunc: () => Any, val method: Method = null) {
   var weight = 1.0
   var immediate = false // if true, do not switch between model
   // instances for next step; immediately execute this model again
-  var stayTime: Option[(Int, Int)] = None
   var waitTime: Option[(Int, Int)] = None
   //subscribe
   var subTopic: Option[String] = None
@@ -64,6 +63,9 @@ class Action(val transfunc: () => Any, val method: Method = null) {
     this
   }
 
+/*
+  var stayTime: Option[(Int, Int)] = None
+
   def stay(time: Int): Action = {
     stayTime = Some(time, time)
     this
@@ -73,7 +75,7 @@ class Action(val transfunc: () => Any, val method: Method = null) {
     stayTime = Some(times)
     this
   }
-
+*/
   def timeout(time: Int): Action = {
     timeout(time, time)
   }
