@@ -1,7 +1,7 @@
 import modbat.dsl._
 
 class CounterTest extends Model {
-  setInstanceNum(10)
+  setInstanceNum(100)
   val counter = new Counter()
   var model : Int = 0
   "init" -> "init" := {
@@ -35,7 +35,7 @@ class CounterTest extends Model {
 class Counter {
   private var n = 0 
   def inc = n += 1
-  def dec = if (n>3) n -= 2 else n -= 1//Bug!
+  def dec = n -= 1//if (n>3) n -= 2 else n -= 1//Bug!
   def get = n			
   def reset = n = 0	
 }

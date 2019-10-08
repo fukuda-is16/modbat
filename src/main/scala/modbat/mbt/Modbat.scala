@@ -261,9 +261,6 @@ object Modbat {
   }
 
   def runTest = {
-    printf("arrived runTest")
-    Log.error("runTest log.error")
-    Log.debug("runTest log.debug")
     MBT.clearLaunchedModels
     MBT.testHasFailed = false
     wrapRun
@@ -295,7 +292,6 @@ object Modbat {
       }
       MBT.checkDuplicates = (i == 1)
       val result = runTest
-      printf("runTest end\n")
       count = i
       restoreChannels
       if (TransitionResult.isErr(result)) {
@@ -431,12 +427,10 @@ object Modbat {
       val model = successorState._1
       val fI:List[(modbat.dsl.Transition, Int)] = successorState._2.feasibleInstances
       successorState._2.feasibleInstances = List.empty
-      Log.debug("fI.isEmpty = "+ fI.isEmpty)
       for(ins <- fI) {
         val trans: Transition = ins._1
         val n: Int = ins._2
         model.executeTransitionRepeat(trans, n)
-        fI
       }
       succStates = allSuccStates(null)
     }

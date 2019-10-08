@@ -600,7 +600,6 @@ class MBT (val model: Model, val trans: List[Transition]) {
     tr.dest = uniqueState(tr.dest)
 
     tr.origin.addTransition(tr)
-    tr.origin.viewTransitions
     Log.debug (name + ": Registered state transition from " + tr.origin +
 	      " to " + tr.dest)
     if (MBT.checkDuplicates && !ignoreDuplicates) {
@@ -810,7 +809,7 @@ class MBT (val model: Model, val trans: List[Transition]) {
   def executeTransitionRepeat(successor: Transition, n: Int):
     (TransitionResult, RecordedTransition) = {
     if (!MBT.isOffline) {
-      Log.fine(name + ": Executing transition " + successor + " " + n + "times...")
+      Log.fine(name + ": Executing transition " + successor + " " + n + " times...")
     }
     if (successor.action.transfunc ne null) {
       try {
