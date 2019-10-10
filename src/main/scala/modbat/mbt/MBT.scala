@@ -783,7 +783,7 @@ class MBT (val model: Model, val trans: List[Transition]) {
     var result: List[State] = List.empty
     for(s <- states) {
       val st:State = s._2
-      if(!st.availableTransitions.isEmpty && st.instanceNum > 0) result = st :: result
+      if(!st.feasibleInstances.isEmpty && st.instanceNum > 0) result = st :: result
     }
     result
   }
@@ -882,14 +882,4 @@ class MBT (val model: Model, val trans: List[Transition]) {
   def invokeTransition(label: String): Unit = {
     MBT.transitionQueue.enqueue((this, label))
   }
-/*
-  class WakeUp() extends Thread {
-    override def run() {
-      MBT.stayLock.synchronized {
-        staying = false
-      }
-      Log.fine(name + ": Finished staying.")
-    }
-  }
-*/
 }

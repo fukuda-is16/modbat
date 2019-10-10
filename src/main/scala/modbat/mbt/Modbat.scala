@@ -351,10 +351,11 @@ object Modbat {
       for (m <- MBT.launchedModels filterNot (_ isObserver) filter (_.joining == null)) {
         addSuccStates(m, result)
       }
-
+      Log.debug("result.isEmpty = "+result.isEmpty)
       if (result.isEmpty) {
         MBT.time.scheduler.timeUntilNextTask match {
           case Some(s) => {
+            Log.debug("s = "+s)
             if(s > 0.millis) {
               MBT.time.advance(s)
             } else MBT.time.scheduler.tick()
@@ -425,19 +426,14 @@ object Modbat {
       //successor(transition)であったところを、succStateに替える
       //succStateのfeasibleInstancesを実行していく
       val rand = new Random(System.currentTimeMillis())
-      val successorState = succStates(rand.nextInt(succStates.length))
+      val successorState:(MBT, State) = succStates(rand.nextInt(succStates.length))
       //successorStateの(遷移,instance個数)の組ごとにexecuteTransition
       //stateのinstanceNumの移動もexecuteTransition内で行う
       val model = successorState._1
-
-      val fI:Map[modbat.dsl.Transition, Int] = successorState._2.feasibleInstances
-      if(fI.isEmpty) {
-        for(kv <- fI) {
-          val (k,v) = kv
-          Log.debug("kv <- fI = "+ k.toString + ", " + v)
-        }
-      }
-      successorState._2.feasibleInstances = Map.empty
+      val state = successorState._2
+      state.disableTimeout
+      val fI:Map[modbat.dsl.Transition, Int] = state.feasibleInstances
+      state.feasibleInstances = Map.empty
       Log.debug("Map")
       for(ins <- fI) {
         val trans: Transition = ins._1
@@ -504,7 +500,7 @@ object Modbat {
     for (t <- transitions) {
       Log.warn(ppTrans(t))
       for (u <- t.updates) {
-	Log.warn("  " + u._1 + " = " + u._2)
+	      Log.warn("  " + u._1 + " = " + u._2)
       }
     }
   }

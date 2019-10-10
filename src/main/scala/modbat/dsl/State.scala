@@ -13,7 +13,7 @@ class State (val name: String) {
   var instanceNum = 0
 //TODO: Mapにする...と、ちゃんとkeyからtransitionを探せるのかよくわからない
   var feasibleInstances: Map[Transition, Int] = Map.empty//Map[Transition, Int]
-  var waitingInstances: Map[Int, (Int, Boolean)] = Map.empty//key: id, value: (instanceNum,disabled)
+  @volatile var waitingInstances: Map[Int, (Int, Boolean)] = Map.empty//key: id, value: (instanceNum,disabled)
   var transitions: List[Transition] = List.empty
   var timeSlice = 10//slices we make when waiting for timeout
   var timeoutId = 0
@@ -34,8 +34,11 @@ class State (val name: String) {
   }
   def waitingInstanceNum(id: Int): Int = waitingInstances(id)._1
   def disabled(id: Int): Boolean = waitingInstances(id)._2
-  def disable = waitingInstances.foreach({i => (i._1,true)})
-  def availableTransitions: List[(Transition)] = transitions.filter({t => t.subTopic.isEmpty && t.waitTime.isEmpty})
+  def disableTimeout = synchronized {
+      Log.debug("disableTimeout in " + this.toString)
+      waitingInstances.foreach({i => (i._1,true)})
+    }
+  private def availableTransitions: List[(Transition)] = transitions.filter({t => t.subTopic.isEmpty && t.waitTime.isEmpty})
   def addTransition(tr: Transition) = {
     transitions = tr +: transitions
   }
@@ -86,6 +89,7 @@ class State (val name: String) {
     } else {
       timeout match {
         case Some(t) =>
+          Log.debug("assign timeout")
           assignTimeout(t,n)
         case None => 
     }
@@ -110,17 +114,25 @@ class State (val name: String) {
   }
 
   def registerToScheduler(t:Transition, time: Int, n: Int) {
-    val task = new TimeoutTask(t, n, getId)
+    val id = getId
+    synchronized {
+      waitingInstances = waitingInstances + (id -> (n, false))
+    }
+    val task = new TimeoutTask(t, n, id)
+    Log.debug("registered task to execute " + t.toString + " for " + n + " instances in " + time + " millis")
     MBT.time.scheduler.scheduleOnce(time.millis)(task.run())
   }
 
   class TimeoutTask(t: Transition, n: Int, id: Int) extends Thread {
-//concurrencyの問題を考慮する必要がありそう
     override def run() {
+      Log.debug("run")
       if(!disabled(id)) {
+        Log.debug("add timeout transition to feasibleInstances")
         addFeasibleInstances(t, n)
       }
-      waitingInstances -= id
+      synchronized {
+        waitingInstances = waitingInstances - id
+      }
     }
   }
 }
