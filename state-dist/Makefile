@@ -2,7 +2,7 @@
 MODBAT_PATH := ..
 MODBAT := $(MODBAT_PATH)/build/modbat.jar
 OPTION := -n=5 --log-path=./log
-MODEL := CounterTest
+MODEL := TimeoutTest1
 
 all:
 	cd $(MODBAT_PATH); ./gradlew build -x test
