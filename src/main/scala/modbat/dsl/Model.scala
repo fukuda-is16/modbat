@@ -16,18 +16,19 @@ object Model {
       // do not set this flag in Modbat thread as functions that are
       // expected to throw an assertion failure would otherwise mistakenly
       // mark a test as failed
+      println("assert(): Thread.currentThread != MBT.currentThread = "+(Thread.currentThread != MBT.modbatThread))
       if (Thread.currentThread != MBT.modbatThread) {
-	MBT.synchronized {
-	  val e = new AssertionError("Assertion failed in Thread " +
+      	MBT.synchronized {
+	        val e = new AssertionError("Assertion failed in Thread " +
 				     Thread.currentThread.getName)
-	  MBT.externalException = e
-	  MBT.testHasFailed = true
-	}
+	        MBT.externalException = e
+	        MBT.testHasFailed = true
+      	}
       }
       if (message == null) {
-	scala.Predef.assert(false)
+      	scala.Predef.assert(false)
       } else {
-	scala.Predef.assert(false, message)
+	      scala.Predef.assert(false, message)
       }
     }
   }

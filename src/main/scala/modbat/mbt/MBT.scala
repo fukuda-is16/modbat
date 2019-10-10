@@ -836,7 +836,10 @@ class MBT (val model: Model, val trans: List[Transition]) {
 	          handle(illarg, successor)
 	        }
 	      }
-        case e: Throwable => handle(e, successor)
+        case e: Throwable => {
+          Log.debug("handle")
+          handle(e, successor)
+        }
       }
     } else {
       Log.debug("Empty transition action.")

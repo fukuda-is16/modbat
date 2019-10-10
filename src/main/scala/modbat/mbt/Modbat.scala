@@ -295,7 +295,7 @@ object Modbat {
       count = i
       restoreChannels
       if (TransitionResult.isErr(result)) {
-	failed += 1
+	      failed += 1
       } else {
       	assert (result == Ok())
       }
@@ -377,39 +377,39 @@ object Modbat {
 			updates: List[(Field, Any)]) {
     result match {
       case (Ok(_), successorTrans: RecordedTransition) =>
-	successorTrans.updates = updates
-	successorTrans.randomTrace =
-	  MBT.rng.asInstanceOf[CloneableRandom].trace
-	successorTrans.debugTrace =
-	  MBT.rng.asInstanceOf[CloneableRandom].debugTrace
-	MBT.rng.asInstanceOf[CloneableRandom].clear
-	executedTransitions += successorTrans
-	val timesSeen =
-	  timesVisited.getOrElseUpdate(RecordedState(model,
-						     successorTrans.dest), 0)
-	timesVisited += ((RecordedState(model, successorTrans.dest),
-			  timesSeen + 1))
+        successorTrans.updates = updates
+        successorTrans.randomTrace =
+          MBT.rng.asInstanceOf[CloneableRandom].trace
+        successorTrans.debugTrace =
+          MBT.rng.asInstanceOf[CloneableRandom].debugTrace
+        MBT.rng.asInstanceOf[CloneableRandom].clear
+        executedTransitions += successorTrans
+        val timesSeen =
+          timesVisited.getOrElseUpdate(RecordedState(model,
+                      successorTrans.dest), 0)
+        timesVisited += ((RecordedState(model, successorTrans.dest),
+              timesSeen + 1))
       case (Backtrack, _) =>
-	MBT.rng = localStoredRNGState // backtrack RNG state
-	// retry with other successor states in next loop iteration
+        MBT.rng = localStoredRNGState // backtrack RNG state
+        // retry with other successor states in next loop iteration
       case (r: TransitionResult, failedTrans: RecordedTransition) =>
-	assert(TransitionResult.isErr(r))
-	failedTrans.randomTrace =
-	  MBT.rng.asInstanceOf[CloneableRandom].trace
-	failedTrans.debugTrace =
-	  MBT.rng.asInstanceOf[CloneableRandom].debugTrace
-	MBT.rng.asInstanceOf[CloneableRandom].clear
-	executedTransitions += failedTrans
+        assert(TransitionResult.isErr(r))
+        failedTrans.randomTrace =
+          MBT.rng.asInstanceOf[CloneableRandom].trace
+        failedTrans.debugTrace =
+          MBT.rng.asInstanceOf[CloneableRandom].debugTrace
+        MBT.rng.asInstanceOf[CloneableRandom].clear
+        executedTransitions += failedTrans
     }
   }
 
   def otherThreadFailed = {
     MBT.synchronized {
       if (MBT.testHasFailed) {
-	printTrace(executedTransitions.toList)
-	true
+        printTrace(executedTransitions.toList)
+        true
       } else {
-	false
+        false
       }
     }
   }
@@ -418,6 +418,10 @@ object Modbat {
 
     //while (!successors.isEmpty && (totalW > 0 || !MBT.transitionQueue.isEmpty)) {
     while(!succStates.isEmpty) {
+      if (MBT.rng.nextFloat(false) < Main.config.abortProbability) {
+	      Log.debug("Aborting...")
+	      return (Ok(), null)
+      }
       //successor(transition)であったところを、succStateに替える
       //succStateのfeasibleInstancesを実行していく
       val rand = new Random(System.currentTimeMillis())
@@ -425,12 +429,24 @@ object Modbat {
       //successorStateの(遷移,instance個数)の組ごとにexecuteTransition
       //stateのinstanceNumの移動もexecuteTransition内で行う
       val model = successorState._1
-      val fI:List[(modbat.dsl.Transition, Int)] = successorState._2.feasibleInstances
-      successorState._2.feasibleInstances = List.empty
+
+      val fI:Map[modbat.dsl.Transition, Int] = successorState._2.feasibleInstances
+      if(fI.isEmpty) {
+        for(kv <- fI) {
+          val (k,v) = kv
+          Log.debug("kv <- fI = "+ k.toString + ", " + v)
+        }
+      }
+      successorState._2.feasibleInstances = Map.empty
+      Log.debug("Map")
       for(ins <- fI) {
         val trans: Transition = ins._1
         val n: Int = ins._2
-        model.executeTransitionRepeat(trans, n)
+        val result = model.executeTransitionRepeat(trans, n)
+        if(TransitionResult.isErr(result._1)) {
+      	  printTrace(executedTransitions.toList)
+          return result
+        }
       }
       succStates = allSuccStates(null)
     }
@@ -438,7 +454,8 @@ object Modbat {
     Log.debug("No more successors.")
     Transition.pendingTransitions.clear
     // in case a newly constructed model was never launched
-    printf("exploreSuccessors.return\n")
+    //TODO: ここをassertion handleするように治す 元のModbat.scalaの476行目以降。case ((OK(), ...)) 
+
     return (Ok(), null)
   }
 

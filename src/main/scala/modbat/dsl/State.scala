@@ -11,7 +11,8 @@ class State (val name: String) {
   var coverage: StateCoverage = _
 
   var instanceNum = 0
-  var feasibleInstances: List[(Transition, Int)] = List.empty//Map[Transition, Int]
+//TODO: Mapにする...と、ちゃんとkeyからtransitionを探せるのかよくわからない
+  var feasibleInstances: Map[Transition, Int] = Map.empty//Map[Transition, Int]
   var waitingInstances: Map[Int, (Int, Boolean)] = Map.empty//key: id, value: (instanceNum,disabled)
   var transitions: List[Transition] = List.empty
   var timeSlice = 10//slices we make when waiting for timeout
@@ -20,6 +21,16 @@ class State (val name: String) {
   def getId = {
     timeoutId += 1
     timeoutId
+  }
+  def addFeasibleInstances(t: Transition, n: Int) = {
+    if(n > 0) {
+      if(feasibleInstances.contains(t)) {
+        feasibleInstances = feasibleInstances.updated(t, feasibleInstances(t) + n)
+      } else {
+        feasibleInstances = feasibleInstances.updated(t, n)
+      }
+      Log.debug("added "+ t.toString +" (" + n +" instances) to feasibleInstances")
+    }
   }
   def waitingInstanceNum(id: Int): Int = waitingInstances(id)._1
   def disabled(id: Int): Boolean = waitingInstances(id)._2
@@ -61,18 +72,16 @@ class State (val name: String) {
         s = s + tr.toString+","
       }
       val totalW = totalWeight(availableTransitions)
-      Log.debug(s+" totalW = " + totalW)
+      Log.debug(s + " totalW = " + totalW)
       val rnd = scala.util.Random.shuffle(availableTransitions)
       for(t <- rnd) {
         val tN = (n * t.action.weight / totalW).toInt
         if(tN > 0) {
-          feasibleInstances = (t, tN) :: feasibleInstances
-          Log.debug("added "+t.toString +" (" + tN +" instances) to feasibleInstances")
+          addFeasibleInstances(t, tN)
           remain = remain - tN
         }
       }
-      feasibleInstances = (rnd.head, remain) :: feasibleInstances
-      Log.debug("added "+rnd.head.toString +" (" + remain +" instances) to feasibleInstances")
+      addFeasibleInstances(rnd.head, remain)
 
     } else {
       timeout match {
@@ -109,7 +118,7 @@ class State (val name: String) {
 //concurrencyの問題を考慮する必要がありそう
     override def run() {
       if(!disabled(id)) {
-        feasibleInstances = (t, n) :: feasibleInstances
+        addFeasibleInstances(t, n)
       }
       waitingInstances -= id
     }

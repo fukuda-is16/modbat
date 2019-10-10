@@ -1,7 +1,7 @@
 #開発用 modbatを修正した時はallを、モデルだけ修正した時はmqtttestを使用
 MODBAT_PATH := ..
 MODBAT := $(MODBAT_PATH)/build/modbat.jar
-OPTION := -n=1 --log-path=./log
+OPTION := -n=5 --log-path=./log
 MODEL := CounterTest
 
 all:
@@ -16,8 +16,9 @@ test: $(MODBAT) $(MODEL).scala
 
 .PHONY: run cleanlog
 run:
-	-@make cleanlog
+	mkdir -p log
+	@make cleanlog
 	scala -cp .:$(MODBAT) $(MODBAT) $(OPTION) $(MODEL)
 cleanlog:
-	-@find -name "*.log" | xargs rm
-	-@find -name "*.err" | xargs rm
+	find -name "*.log" | xargs rm -f
+	find -name "*.err" | xargs rm -f
