@@ -79,6 +79,7 @@ object MBT {
   val warningIssuedOn = new HashSet[Object]()
   // do not issue same warning twice for static model problem
   var currentTransition: Transition = null
+  var currentTransitionInstanceNum = 0
   val time = new VirtualTime
 
   def init {
@@ -193,6 +194,7 @@ object MBT {
   def getRandomSeed() = rng.getRandomSeed
 
   def clearLaunchedModels() {
+    for(m <- launchedModels) for((_,state) <- m.states) state.clear
     launchedModels.clear
     launchedModelInst.clear
     transitionQueue.clear
@@ -259,38 +261,38 @@ object MBT {
   def mkModel(modelInstance: Model) = {
     try {
       if (modelInstance != null) {
-	modelInstance
+      	modelInstance
       } else {
-	assert(Transition.pendingTransitions.isEmpty)
-	val cons = findConstructor(modelClass.asInstanceOf[Class[Model]])
-	cons.newInstance().asInstanceOf[Model]
+      	assert(Transition.pendingTransitions.isEmpty)
+      	val cons = findConstructor(modelClass.asInstanceOf[Class[Model]])
+	      cons.newInstance().asInstanceOf[Model]
       }
     } catch {
       case c: ClassCastException => {
-	Log.error("Model class does not extend Model.")
-	Log.error("Check if the right class was specified.")
-	System.exit(1)
-	null
+        Log.error("Model class does not extend Model.")
+        Log.error("Check if the right class was specified.")
+        System.exit(1)
+        null
       }
       case e: InstantiationException => {
-	Log.error("Cannot instantiate model class.")
-	Log.error("The class must not be abstract or an interface.")
-	System.exit(1)
-	null
+        Log.error("Cannot instantiate model class.")
+        Log.error("The class must not be abstract or an interface.")
+        System.exit(1)
+        null
       }
       case e: InvocationTargetException => {
-	Log.error("Exception in default (nullary) constructor of main model.")
-	Log.error("In dot mode, a constructor that ignores any data")
-	Log.error("is sufficient to visualize the ESFM graph.")
-	if (!enableStackTrace) {
-	  Log.error("Use --print-stack-trace to see the stack trace.")
-	} else {
-	  val cause = e.getCause
-	  Log.error(cause.toString)
-	  printStackTrace(cause.getStackTrace)
-	}
-	System.exit(1)
-	null
+        Log.error("Exception in default (nullary) constructor of main model.")
+        Log.error("In dot mode, a constructor that ignores any data")
+        Log.error("is sufficient to visualize the ESFM graph.")
+        if (!enableStackTrace) {
+          Log.error("Use --print-stack-trace to see the stack trace.")
+        } else {
+          val cause = e.getCause
+          Log.error(cause.toString)
+          printStackTrace(cause.getStackTrace)
+        }
+        System.exit(1)
+        null
       }
     }
   }
@@ -448,8 +450,8 @@ class MBT (val model: Model, val trans: List[Transition]) {
     if (model.isInstanceOf[Observer]) {
       isObserver = true
       if (firstLaunch) {
-	Log.error("Primary model must not be of type Observer.")
-	System.exit(1)
+        Log.error("Primary model must not be of type Observer.")
+        System.exit(1)
       }
       warnAboutNonDefaultWeights
     }
@@ -585,7 +587,9 @@ class MBT (val model: Model, val trans: List[Transition]) {
       states(name)
     } else {
       states += (name -> state)
+      Log.debug(s"(uniqueState) added $name to states")
       setCoverageInfo(state)
+      state.model = this
       state
     }
   }
@@ -598,10 +602,11 @@ class MBT (val model: Model, val trans: List[Transition]) {
 	       ignoreDuplicates: Boolean = false) {
     tr.origin = uniqueState(tr.origin)
     tr.dest = uniqueState(tr.dest)
-
     tr.origin.addTransition(tr)
-    Log.debug (name + ": Registered state transition from " + tr.origin +
-	      " to " + tr.dest)
+    val topic = tr.subTopic.getOrElse("(None)")
+    val timeout = tr.waitTime.getOrElse((0,0))
+    Log.debug(s"$name: Registered transition ${tr.toString} from ${tr.origin} to ${tr.dest}, subscribe = $topic, timeout = $timeout")
+    tr.origin.viewTransitions
     if (MBT.checkDuplicates && !ignoreDuplicates) {
       val label = tr.action.label
       if (!label.isEmpty) {
@@ -813,10 +818,12 @@ class MBT (val model: Model, val trans: List[Transition]) {
     }
     if (successor.action.transfunc ne null) {
       try {
+        MBT.currentTransition = successor
+        MBT.currentTransitionInstanceNum = n
 	      TransitionCoverage.prep(successor)
-        //TODO: think another implementation to execute transfunc()?
-        for (i <- 1 to n) successor.action.transfunc()
-	      if (!successor.expectedExceptions.isEmpty) {
+        //for (i <- 1 to n) successor.action.transfunc()//TODO:1度だけ実行　外界へのアクション(現在はpublishのみ)は多重度nを見てn回実行
+	      successor.action.transfunc()
+        if (!successor.expectedExceptions.isEmpty) {
 	        Log.warn("Expected exception did not occur, aborting.")
 	        (ExpectedExceptionMissing, new RecordedTransition(this, successor))
       	} else {

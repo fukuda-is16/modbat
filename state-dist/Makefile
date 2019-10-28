@@ -1,8 +1,8 @@
 #開発用 modbatを修正した時はallを、モデルだけ修正した時はmqtttestを使用
 MODBAT_PATH := ..
 MODBAT := $(MODBAT_PATH)/build/modbat.jar
-OPTION := -n=5 --log-path=./log
-MODEL := TimeoutTest1
+OPTION := -n=5 --log-path=./log --log-level=all
+MODEL := MessageTest
 
 all:
 	cd $(MODBAT_PATH); ./gradlew build -x test

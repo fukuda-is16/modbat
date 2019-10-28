@@ -31,7 +31,7 @@ class Transition (var origin:		State,
   val nextStatePredConv = ListBuffer[NextStatePredicate]()
   var coverage: TransitionCoverage = _
   var n: Int = 0
-  def waitTime: Option[(Int,Int)] = action.waitTime
+  val waitTime: Option[(Int,Int)] = action.waitTime
   def subTopic: Option[String] = action.subTopic
 
   def expectedExceptions = action.expectedExc.toList
@@ -61,7 +61,6 @@ class Transition (var origin:		State,
     }
   }
 
-  printf("added transition "+ this.toString+ " to state " + origin.toString)
 
   def prTrans = {
     if (isSynthetic) {

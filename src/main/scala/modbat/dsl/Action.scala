@@ -4,7 +4,7 @@ import java.lang.reflect.Method
 import scala.collection.mutable.ListBuffer
 import scala.util.matching.Regex
 import modbat.log.Log
-import modbat.mbt.MBT
+import modbat.mbt.{MBT, MessageHandler}
 
 class Action(val transfunc: () => Any, val method: Method = null) {
   val expectedExc = ListBuffer[Regex]()
@@ -63,19 +63,6 @@ class Action(val transfunc: () => Any, val method: Method = null) {
     this
   }
 
-/*
-  var stayTime: Option[(Int, Int)] = None
-
-  def stay(time: Int): Action = {
-    stayTime = Some(time, time)
-    this
-  }
-
-  def stay(times: (Int, Int)): Action = {
-    stayTime = Some(times)
-    this
-  }
-*/
   def timeout(time: Int): Action = {
     timeout(time, time)
   }

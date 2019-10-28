@@ -2,7 +2,7 @@ package modbat.dsl
 
 import modbat.cov.StateCoverage
 import modbat.log.Log
-import modbat.mbt.MBT
+import modbat.mbt.{MBT, MessageHandler}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -13,10 +13,14 @@ class State (val name: String) {
   var instanceNum = 0
 //TODO: Mapにする...と、ちゃんとkeyからtransitionを探せるのかよくわからない
   var feasibleInstances: Map[Transition, Int] = Map.empty//Map[Transition, Int]
-  @volatile var waitingInstances: Map[Int, (Int, Boolean)] = Map.empty//key: id, value: (instanceNum,disabled)
+  @volatile var waitingInstances: Map[Int, Int] = Map.empty//key: id, value: (instanceNum,disabled)
+  var freeInstanceNum = 0 //instances with no feasible transition
   var transitions: List[Transition] = List.empty
+  var subTopics: Map[String, Transition] = Map.empty
+  var messageBuffer: Map[String, String] = Map.empty
   var timeSlice = 10//slices we make when waiting for timeout
   var timeoutId = 0
+  var model: MBT = _
 
   def getId = {
     timeoutId += 1
@@ -29,23 +33,42 @@ class State (val name: String) {
       } else {
         feasibleInstances = feasibleInstances.updated(t, n)
       }
-      Log.debug("added "+ t.toString +" (" + n +" instances) to feasibleInstances")
+      Log.debug(s"added ${t.toString} ($n  instances) to feasibleInstances")
     }
   }
-  def waitingInstanceNum(id: Int): Int = waitingInstances(id)._1
-  def disabled(id: Int): Boolean = waitingInstances(id)._2
+  def waitingInstanceNum: Int = {
+    var num = 0
+    Log.debug("in waitingInstanceNum: waitingInstances.isEmpty = "
+      +waitingInstances.isEmpty)
+    waitingInstances.foreach(i => num = num + i._2)
+    num
+  }
+  def disabled(id: Int): Boolean = !waitingInstances.contains(id)
   def disableTimeout = synchronized {
-      Log.debug("disableTimeout in " + this.toString)
-      waitingInstances.foreach({i => (i._1,true)})
+    if(!waitingInstances.isEmpty) {
+      Log.debug("disable timeout in " + this.toString)
+      waitingInstances = Map.empty
     }
-  private def availableTransitions: List[(Transition)] = transitions.filter({t => t.subTopic.isEmpty && t.waitTime.isEmpty})
-  def addTransition(tr: Transition) = {
-    transitions = tr +: transitions
   }
+  private def availableTransitions: List[(Transition)] = transitions.filter({t => t.subTopic.isEmpty && t.waitTime.isEmpty})
+  def addTransition(t: Transition) = {
+    if(transitions.filter(_ == t).isEmpty) {
+      transitions = t :: transitions
+      Log.debug(s"(state ${this.toString}) registered transition ${t.toString}")
+      t.subTopic match {
+        case Some(topic) =>
+          subTopics = subTopics + (topic -> t)
+          Log.debug(s"(state ${this.toString}) registering topic $topic (transition ${t.toString})")
+          MessageHandler.regTopic(topic, this)
+        case _ => 
+      }
+    }
+  }
+
   def viewTransitions = {
-    var s = toString + ".transitions = "
-    transitions.foreach(s += _.toString)
-    Log.info(s)
+    var s = this.toString + ".transitions = "
+    transitions.foreach(s += _.toString + ", ")
+    Log.debug(s)
   }
   def totalWeight(trans: List[Transition]) = {
     var w = 0.0
@@ -59,6 +82,16 @@ class State (val name: String) {
     if(tr.isEmpty) None else Some(tr.head)
   }
 
+  def subTrans(topic: String): Map[String, Transition] = {
+    var m: Map[String, Transition] = Map.empty
+    for(t <- transitions) {
+      t.subTopic match {
+        case Some(topic) => m = m + (topic -> t)
+        case _ =>
+      }
+    }
+    m
+  }
   def reduceInstances(n: Int) = {
     instanceNum -= n
     assert (instanceNum >= 0)
@@ -67,15 +100,15 @@ class State (val name: String) {
   //Assign instances. If no transition is available and timeout is setted, register instances to scheduler.
   def assignInstances(n: Int) = {
     instanceNum += n
-    Log.info(instanceNum + " instances are in state " + this.toString + ".")
+    Log.info(s"$instanceNum instance(s) are in state ${this.toString}.")
     var remain = n
     if(!availableTransitions.isEmpty) {
-      var s = "availableTransitions: "
+      var s = "(state " + this.toString + ") availableTransitions: "
       for(tr <- availableTransitions) {
         s = s + tr.toString+","
       }
       val totalW = totalWeight(availableTransitions)
-      Log.debug(s + " totalW = " + totalW)
+      Log.debug(s + " total weight = " + totalW)
       val rnd = scala.util.Random.shuffle(availableTransitions)
       for(t <- rnd) {
         val tN = (n * t.action.weight / totalW).toInt
@@ -87,13 +120,17 @@ class State (val name: String) {
       addFeasibleInstances(rnd.head, remain)
 
     } else {
+      viewTransitions
+      //オブジェクトの
       timeout match {
         case Some(t) =>
           Log.debug("assign timeout")
           assignTimeout(t,n)
         case None => 
+          freeInstanceNum += n
+          Log.debug(s"(state ${this.toString}) freeInstanceNum = $freeInstanceNum")
+      }
     }
-  }
 
   def assignTimeout(t:Transition, n: Int) {
     t.action.waitTime match {
@@ -103,36 +140,56 @@ class State (val name: String) {
         } else {
           val width = (y - x) / (timeSlice - 1)
           val dividedN = (n / timeSlice).toInt
+          val l = scala.util.Random.shuffle(List.range(0,timeSlice))
+          val (l1, _) = l.splitAt(n - dividedN * timeSlice)
           for(i <- 0 to timeSlice - 1) {
-            val remain = if(i < n - dividedN * timeSlice) 1 else 0
+            val remain = if(l1.contains(i)) 1 else 0
             registerToScheduler(t, x + (i * width).toInt, dividedN + remain)
           }
         }
-      case None =>
+      case None => 
       }
     }
   }
 
   def registerToScheduler(t:Transition, time: Int, n: Int) {
-    val id = getId
-    synchronized {
-      waitingInstances = waitingInstances + (id -> (n, false))
+    if(n > 0) {
+      val id = getId
+      synchronized {
+        waitingInstances = waitingInstances + (id -> n)
+      }
+      val task = new TimeoutTask(t, n, id)
+      Log.debug(s"registered task to execute ${t.toString} for $n instances in $time millis")
+      MBT.time.scheduler.scheduleOnce(time.millis)(task.run())
     }
-    val task = new TimeoutTask(t, n, id)
-    Log.debug("registered task to execute " + t.toString + " for " + n + " instances in " + time + " millis")
-    MBT.time.scheduler.scheduleOnce(time.millis)(task.run())
   }
 
   class TimeoutTask(t: Transition, n: Int, id: Int) extends Thread {
     override def run() {
-      Log.debug("run")
       if(!disabled(id)) {
-        Log.debug("add timeout transition to feasibleInstances")
+        Log.debug(s"add timeout transition ${t.toString} to feasibleInstances")
         addFeasibleInstances(t, n)
       }
       synchronized {
         waitingInstances = waitingInstances - id
       }
     }
+  }
+
+  def messageArrived(topic: String, msg: String) {
+    messageBuffer = messageBuffer + (topic -> msg)
+    var trans = subTopics(topic)
+    Log.debug(s"(state ${this.toString} messageArrived) message arrived from topic $topic: $msg")
+    addFeasibleInstances(trans, waitingInstanceNum + freeInstanceNum)
+    disableTimeout
+    Log.debug(s"($toString messageArrived) resetting freeInstanceNum ($freeInstanceNum -> 0)")
+    freeInstanceNum = 0
+  }
+
+  def clear = {
+    transitions = List.empty
+    instanceNum = 0
+    freeInstanceNum = 0
+    disableTimeout
   }
 }

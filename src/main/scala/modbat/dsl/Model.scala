@@ -1,7 +1,8 @@
 package modbat.dsl
 
-import modbat.mbt.MBT
+import modbat.mbt.{MBT, MessageHandler}
 import modbat.cov.TransitionCoverage
+import modbat.log.Log
 import modbat.RequirementFailedException
 import scala.language.implicitConversions
 
@@ -115,5 +116,19 @@ abstract trait Model {
   }
 
   var instanceNum: Int = 1
-  def setInstanceNum(n: Int) = {instanceNum = n}
+  final def setInstanceNum(n: Int) = {instanceNum = n}
+  //send message to Mqtt server 
+  final def publish(topic: String, msg: String) {
+    MessageHandler.publishRepeat(topic, msg, MBT.currentTransitionInstanceNum)
+  }
+  final def getMessage = {
+    val trans = MBT.currentTransition
+    trans.subTopic match {
+      case Some(topic) =>
+        MessageHandler.messages(topic)
+      case None =>
+        Log.error(s"calling getMqttMessage with no subscription at transition ${trans.toString}")
+        ""
+    }
+  }
 }

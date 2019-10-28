@@ -39,9 +39,8 @@ import modbat.util.CloneableRandom
 import modbat.util.SourceInfo
 import modbat.util.FieldUtil
 
+import org.eclipse.paho.client.mqttv3.{MqttClient, MqttMessage}
 import com.miguno.akka.testing.VirtualTime
-
-class NoTaskException(message :String = null, cause :Throwable = null) extends RuntimeException(message, cause)
 
 /** Contains code to explore model */
 object Modbat {
@@ -66,9 +65,8 @@ object Modbat {
   private val timesVisited = new HashMap[RecordedState, Int]
   val testFailures =
     new HashMap[(TransitionResult, String), ListBuffer[Long]]()
-//  val time = new VirtualTime
   var isUnitTest = true
-
+  val sleepTime = 1000
 
   def init {
     // reset all static variables
@@ -195,9 +193,9 @@ object Modbat {
   object ShutdownHandler extends Thread {
     override def run() {
       if (appState == AppExplore) {
-	restoreChannels
-	Console.println
-	coverage
+        restoreChannels
+        Console.println
+        coverage
       }
     }
   }
@@ -214,14 +212,14 @@ object Modbat {
       val file = new File(filename)
       if ((Main.config.deleteEmptyLog && (file.length == 0)) ||
 	  (Main.config.removeLogOnSuccess && !MBT.testHasFailed)) {
-	if (!file.delete()) {
-	  Log.warn("Cannot delete file " + filename)
-	}
+    	  if (!file.delete()) {
+	        Log.warn("Cannot delete file " + filename)
+      	}
       }
       if (isErr) {
-	System.setErr(orig)
+      	System.setErr(orig)
       } else {
-	System.setOut(orig)
+	      System.setOut(orig)
         Console.print("[2K\r")
       }
     }
@@ -263,6 +261,7 @@ object Modbat {
   def runTest = {
     MBT.clearLaunchedModels
     MBT.testHasFailed = false
+    MessageHandler.clear
     wrapRun
   }
 
@@ -314,7 +313,11 @@ object Modbat {
     }
   }
 
-  def exploreModel(model: MBT) = {
+  def exploreModel(model: MBT): TransitionResult = {
+    for(m <- MBT.launchedModels) {
+      for((_,st) <- m.states) st.viewTransitions
+
+    }
     Log.debug("--- Exploring model ---")
     timesVisited.clear
     executedTransitions.clear
@@ -324,7 +327,9 @@ object Modbat {
       Log.fine("Trace field " + f.getName + " has initial value " + value)
       model.tracedFields.values(f) = value
     }
+
     val result = exploreSuccessors
+
     val retVal = result._1
     val recordedTrans = result._2
     assert (retVal == Ok() || TransitionResult.isErr(retVal))
@@ -351,12 +356,13 @@ object Modbat {
       for (m <- MBT.launchedModels filterNot (_ isObserver) filter (_.joining == null)) {
         addSuccStates(m, result)
       }
-      Log.debug("result.isEmpty = "+result.isEmpty)
+      Log.debug("(allSuccStates) result.isEmpty = "+result.isEmpty)
       if (result.isEmpty) {
         MBT.time.scheduler.timeUntilNextTask match {
           case Some(s) => {
-            Log.debug("s = "+s)
             if(s > 0.millis) {
+              Thread.sleep(sleepTime)
+              Log.debug("virtual time advance "+s)
               MBT.time.advance(s)
             } else MBT.time.scheduler.tick()
           }
@@ -419,6 +425,7 @@ object Modbat {
 
     //while (!successors.isEmpty && (totalW > 0 || !MBT.transitionQueue.isEmpty)) {
     while(!succStates.isEmpty) {
+      Log.info("exploreSuccessors")
       if (MBT.rng.nextFloat(false) < Main.config.abortProbability) {
 	      Log.debug("Aborting...")
 	      return (Ok(), null)
@@ -431,10 +438,9 @@ object Modbat {
       //stateのinstanceNumの移動もexecuteTransition内で行う
       val model = successorState._1
       val state = successorState._2
-      state.disableTimeout
+      //state.disableTimeout //???
       val fI:Map[modbat.dsl.Transition, Int] = state.feasibleInstances
       state.feasibleInstances = Map.empty
-      Log.debug("Map")
       for(ins <- fI) {
         val trans: Transition = ins._1
         val n: Int = ins._2
