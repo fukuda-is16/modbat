@@ -13,6 +13,8 @@ object MessageHandler {
   var useMqtt = false
   @volatile var topics: Map[String, List[State]] = Map.empty
   @volatile var messages: Map[String, String] = Map.empty
+  var arrivedTopic: Set[String] = Set.empty
+  val mesLock = new AnyRef
   var defaultQos = 1
 
   def regTopic(topic: String, state: State, qos: Int = defaultQos) = {
@@ -50,7 +52,11 @@ object MessageHandler {
       client.disconnect()
       //Log.debug("mqtt client disconnected")
     }
-    topics = Map.empty
+    mesLock.synchronized {
+      topics = Map.empty
+      messages = Map.empty
+      arrivedTopic = Set.empty
+    }
     useMqtt = false
   }
   //TODO:テストを終了するたびにスレッドも終了させる
@@ -67,15 +73,12 @@ object MessageHandler {
      * TODO: 来たことをメインスレッドに教えるだけにして、処理はメインスレッドで行うほうが安全
      */
     def messageArrived(topic: String, message: MqttMessage) {
+      //just store messages here, handle these messages in Modbat.allSuccStates
       val msg = message.toString
       Log.debug(s"(MessageHandler) message arrived from $topic: $msg")
-      messages = messages + (topic -> msg)
-      if(topics.contains(topic)) {
-        for(s <- topics(topic)) {
-          s.messageArrived(topic, msg.toString)
-        }
-      } else {
-        Log.error(s"Subscribing topic $topic, but no transition is waiting for it.")
+      mesLock.synchronized {
+        messages = messages + (topic -> msg)
+        arrivedTopic += topic
       }
     }
   }

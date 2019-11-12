@@ -353,6 +353,19 @@ object Modbat {
 
   def allSuccStates(givenModel: MBT): Array[(MBT, State)] = {
     val result = new ArrayBuffer[(MBT, State)]()
+    //handle messages from topics
+    MessageHandler.mesLock.synchronized {
+      for(topic <- MessageHandler.arrivedTopic) {
+        if(MessageHandler.topics.contains(topic)) {
+          for(state <- MessageHandler.topics(topic)) {
+            state.messageArrived(topic, MessageHandler.messages(topic))
+          }
+        } else {
+          Log.error(s"Subscribing topic $topic, but no transition is waiting for it.")
+        }
+      }
+      MessageHandler.arrivedTopic = Set.empty
+    }
     if (givenModel == null) {
       for (m <- MBT.launchedModels filterNot (_ isObserver) filter (_.joining == null)) {
         addSuccStates(m, result)
@@ -436,7 +449,6 @@ object Modbat {
   }
   def exploreSuccessors: (TransitionResult, RecordedTransition) = {
     var succStates: Array[(MBT, State)] = allSuccStates(null)
-
     //while (!successors.isEmpty && (totalW > 0 || !MBT.transitionQueue.isEmpty)) {
     while(!succStates.isEmpty) {
       Log.info("exploreSuccessors")
@@ -444,15 +456,10 @@ object Modbat {
 	      Log.debug("Aborting...")
 	      return (Ok(), null)
       }
-      //successor(transition)であったところを、succStateに替える
-      //succStateのfeasibleInstancesを実行していく
       val rand = new Random(System.currentTimeMillis())
       val successorState:(MBT, State) = succStates(rand.nextInt(succStates.length))
-      //successorStateの(遷移,instance個数)の組ごとにexecuteTransition
-      //stateのinstanceNumの移動もexecuteTransition内で行う
       val model = successorState._1
       val state = successorState._2
-      //state.disableTimeout //???
       val fI:Map[modbat.dsl.Transition, Int] = state.feasibleInstances
       state.feasibleInstances = Map.empty
       for(ins <- fI) {
