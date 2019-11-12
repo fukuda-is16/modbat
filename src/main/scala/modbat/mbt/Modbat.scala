@@ -67,6 +67,7 @@ object Modbat {
     new HashMap[(TransitionResult, String), ListBuffer[Long]]()
   var isUnitTest = true
   val sleepTime = 1000
+  var slept = false
 
   def init {
     // reset all static variables
@@ -356,14 +357,27 @@ object Modbat {
       for (m <- MBT.launchedModels filterNot (_ isObserver) filter (_.joining == null)) {
         addSuccStates(m, result)
       }
-      Log.debug("(allSuccStates) result.isEmpty = "+result.isEmpty)
+      //Log.debug("(allSuccStates) result.isEmpty = "+result.isEmpty)
       if (result.isEmpty) {
         MBT.time.scheduler.timeUntilNextTask match {
           case Some(s) => {
             if(s > 0.millis) {
-              Thread.sleep(sleepTime)
-              Log.debug("virtual time advance "+s)
-              MBT.time.advance(s)
+              if(!slept) {
+                if(MBT.realTimeInstances > 0) {//real time wait
+                  var now = System.currentTimeMillis()
+                  var diff = now - MBT.realMillis
+                  if(diff < s.toMillis) {
+                    Thread.sleep(s.toMillis - diff)
+                  }
+                  MBT.realMillis = MBT.realMillis + s.toMillis
+                  Log.debug("real time sleep")
+                }
+              } else {
+                Log.debug("virtual time advance "+s)
+                Log.debug("time elapsed = "+ MBT.time.elapsed)
+                MBT.time.advance(s)
+              }
+              slept = !slept
             } else MBT.time.scheduler.tick()
           }
           case None => return Array.empty
@@ -454,6 +468,7 @@ object Modbat {
     }
   
     Log.debug("No more successors.")
+    slept = false
     Transition.pendingTransitions.clear
     // in case a newly constructed model was never launched
     //TODO: ここをassertion handleするように治す 元のModbat.scalaの476行目以降。case ((OK(), ...)) 

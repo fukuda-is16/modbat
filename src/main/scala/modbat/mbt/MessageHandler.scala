@@ -42,7 +42,7 @@ object MessageHandler {
     //avoid [ERROR]Too many publishes in progress (32202)
     if(n > connOpts.getMaxInflight) connOpts.setMaxInflight(n)
     for(i <- 1 to n) mqttTopic.publish(message).waitForCompletion
-    Log.debug(s"published $msg $n times to $topic")
+    Log.debug(s"published $msg $n time(s) to $topic")
   }
   //TODO: テストが一回終わった時にコネクションを閉じたりtopicsを消去したりする
   def clear {
@@ -63,6 +63,9 @@ object MessageHandler {
     def deliveryComplete(token: IMqttDeliveryToken) {
       Log.info(s"delivery complete")//: ${token.getMessage}")
     }
+    /*
+     * TODO: 来たことをメインスレッドに教えるだけにして、処理はメインスレッドで行うほうが安全
+     */
     def messageArrived(topic: String, message: MqttMessage) {
       val msg = message.toString
       Log.debug(s"(MessageHandler) message arrived from $topic: $msg")

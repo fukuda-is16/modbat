@@ -11,8 +11,7 @@ class State (val name: String) {
   var coverage: StateCoverage = _
 
   var instanceNum = 0
-//TODO: Mapにする...と、ちゃんとkeyからtransitionを探せるのかよくわからない
-  var feasibleInstances: Map[Transition, Int] = Map.empty//Map[Transition, Int]
+  var feasibleInstances: Map[Transition, Int] = Map.empty
   @volatile var waitingInstances: Map[Int, Int] = Map.empty//key: id, value: (instanceNum,disabled)
   var freeInstanceNum = 0 //instances with no feasible transition
   var transitions: List[Transition] = List.empty
@@ -21,6 +20,20 @@ class State (val name: String) {
   var timeSlice = 10//slices we make when waiting for timeout
   var timeoutId = 0
   var model: MBT = _
+  var timeout: Option[Transition] = None
+  var real = false
+
+  def addRealTimeInstances(n: Int = 1) = {
+    if(MBT.realTimeInstances == 0) MBT.realMillis = System.currentTimeMillis()
+    MBT.realTimeInstances += n
+  }
+  def reduceRealTimeInstances(n: Int = 1) = {
+    MBT.realTimeInstances -= n
+    if(MBT.realTimeInstances < 0) {
+      Log.error("real time tasks shouldn't be negative")
+      System.exit(1)
+    }
+  }
 
   def getId = {
     timeoutId += 1
@@ -33,13 +46,12 @@ class State (val name: String) {
       } else {
         feasibleInstances = feasibleInstances.updated(t, n)
       }
-      Log.debug(s"added ${t.toString} ($n  instances) to feasibleInstances")
+      Log.debug(s"(state $toString) added ${t.toString} ($n  instances) to feasibleInstances")
     }
+    else Log.debug(s"(state $toString) no instance to add")
   }
   def waitingInstanceNum: Int = {
     var num = 0
-    Log.debug("in waitingInstanceNum: waitingInstances.isEmpty = "
-      +waitingInstances.isEmpty)
     waitingInstances.foreach(i => num = num + i._2)
     num
   }
@@ -47,6 +59,7 @@ class State (val name: String) {
   def disableTimeout = synchronized {
     if(!waitingInstances.isEmpty) {
       Log.debug("disable timeout in " + this.toString)
+      if(real) reduceRealTimeInstances(waitingInstanceNum)
       waitingInstances = Map.empty
     }
   }
@@ -55,6 +68,16 @@ class State (val name: String) {
     if(transitions.filter(_ == t).isEmpty) {
       transitions = t :: transitions
       Log.debug(s"(state ${this.toString}) registered transition ${t.toString}")
+
+      if(!t.waitTime.isEmpty) {
+        if(!timeout.isEmpty) if(timeout.get.waitTime != t.waitTime) {
+          Log.error(s"There should be at most one timeout transition in state ${toString}.")
+          System.exit(1)
+        }
+        this.timeout = Some(t)
+        real = t.real
+      }
+      
       t.subTopic match {
         case Some(topic) =>
           subTopics = subTopics + (topic -> t)
@@ -76,10 +99,6 @@ class State (val name: String) {
       w = w + t.action.weight
     }
     w
-  }
-  def timeout: Option[Transition] = {
-    val tr = transitions.filter(!_.waitTime.isEmpty)
-    if(tr.isEmpty) None else Some(tr.head)
   }
 
   def subTrans(topic: String): Map[String, Transition] = {
@@ -159,6 +178,7 @@ class State (val name: String) {
         waitingInstances = waitingInstances + (id -> n)
       }
       val task = new TimeoutTask(t, n, id)
+      if(real) addRealTimeInstances(n)
       Log.debug(s"registered task to execute ${t.toString} for $n instances in $time millis")
       MBT.time.scheduler.scheduleOnce(time.millis)(task.run())
     }
@@ -169,6 +189,7 @@ class State (val name: String) {
       if(!disabled(id)) {
         Log.debug(s"add timeout transition ${t.toString} to feasibleInstances")
         addFeasibleInstances(t, n)
+        if(real) reduceRealTimeInstances(n)
       }
       synchronized {
         waitingInstances = waitingInstances - id
@@ -180,9 +201,9 @@ class State (val name: String) {
     messageBuffer = messageBuffer + (topic -> msg)
     var trans = subTopics(topic)
     Log.debug(s"(state ${this.toString} messageArrived) message arrived from topic $topic: $msg")
+    Log.debug(s"(state $toString) waitingInstanceNum = $waitingInstanceNum, freeInstanceNum = $freeInstanceNum")
     addFeasibleInstances(trans, waitingInstanceNum + freeInstanceNum)
     disableTimeout
-    Log.debug(s"($toString messageArrived) resetting freeInstanceNum ($freeInstanceNum -> 0)")
     freeInstanceNum = 0
   }
 

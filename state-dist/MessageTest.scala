@@ -10,20 +10,20 @@ class MessageTest extends Model {
     println("gotoSender")
   } label "gotoSender"
 
-  "init" -> "reciever" := {
-    println("gotoReciever")
-  } label "gotoReciever" 
+  "init" -> "receiver" := {
+    println("gotoReceiver")
+  } label "gotoReceiver" 
   
   "sender" -> "end" := {
     println("send")
     publish(topic, msg)
   } label "send"
 
-  "reciever" -> "end" := {
-    println("recieve (message = ${getMessage})")
-  }  label "recieve" subscribe topic 
+  "receiver" -> "end" := {
+    println("receive (message = ${getMessage})")
+  }  label "receive" subscribe topic 
 
-  "reciever" -> "end" := {
+  "receiver" -> "end2" := {
     println("never-execute-this")
-  } label "never-execute-this" timeout 10
+  } label "never-execute-this" realTimeout 5000
 }

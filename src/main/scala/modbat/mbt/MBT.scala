@@ -81,6 +81,8 @@ object MBT {
   var currentTransition: Transition = null
   var currentTransitionInstanceNum = 0
   val time = new VirtualTime
+  @volatile var realTimeInstances = 0 //count number of instances waiting by real time
+  @volatile var realMillis: Long = 0
 
   def init {
     warningIssuedOn.clear
@@ -605,7 +607,7 @@ class MBT (val model: Model, val trans: List[Transition]) {
     tr.origin.addTransition(tr)
     val topic = tr.subTopic.getOrElse("(None)")
     val timeout = tr.waitTime.getOrElse((0,0))
-    Log.debug(s"$name: Registered transition ${tr.toString} from ${tr.origin} to ${tr.dest}, subscribe = $topic, timeout = $timeout")
+    Log.debug(s"$name: Registered transition ${tr.toString} from ${tr.origin} to ${tr.dest}, subscribe = $topic, timeout = $timeout, realTimeout = ${tr.real}")
     tr.origin.viewTransitions
     if (MBT.checkDuplicates && !ignoreDuplicates) {
       val label = tr.action.label

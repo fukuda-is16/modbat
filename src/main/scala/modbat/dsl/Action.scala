@@ -15,6 +15,7 @@ class Action(val transfunc: () => Any, val method: Method = null) {
   var immediate = false // if true, do not switch between model
   // instances for next step; immediately execute this model again
   var waitTime: Option[(Int, Int)] = None
+  var real = false //wait with real time
   //subscribe
   var subTopic: Option[String] = None
 
@@ -70,6 +71,15 @@ class Action(val transfunc: () => Any, val method: Method = null) {
   def timeout(times: (Int, Int)): Action = {
     waitTime = Some(times)
     this
+  }
+
+  def realTimeout(time: Int): Action = {
+    realTimeout(time, time)
+  }
+
+  def realTimeout(t1: Int, t2: Int): Action = {
+    real = true
+    timeout(t1, t2)
   }
 
   def subscribe(topic: String): Action = {
