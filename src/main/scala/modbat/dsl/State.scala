@@ -10,14 +10,22 @@ class State (val name: String) {
   override def toString = name
   var coverage: StateCoverage = _
 
+//TODO:  New feature (guard)
+/*
+  var freeInstanceNum: Int = 0 //instances waiting for "subscribe" transitions or normal transitions to be enabled
+  @volatile var waitingInstances: Map[Int, Int] = Map.empty//key: id, value: instanceNum
+  var timeoutInstanceNum: Int = 0//instances reserved to execute timeout transition
+  var subscribedInstances: Map[Trans, Int] = Map.empty //map of instances reserved to execute some "subscribe" transition
+*/
   var instanceNum = 0
   var feasibleInstances: Map[Transition, Int] = Map.empty
+  def feasible = instanceNum > 0 && !feasibleInstances.isEmpty
   @volatile var waitingInstances: Map[Int, Int] = Map.empty//key: id, value: (instanceNum,disabled)
   var freeInstanceNum = 0 //instances with no feasible transition
   var transitions: List[Transition] = List.empty
   var subTopics: Map[String, Transition] = Map.empty
-  var messageBuffer: Map[String, String] = Map.empty
-  var timeSlice = 10//slices we make when waiting for timeout
+  var messageBuffer: String = ""
+  var timeSlice = 11//slices we make when waiting for timeout
   var timeoutId = 0
   var model: MBT = _
   var timeout: Option[Transition] = None
@@ -50,6 +58,9 @@ class State (val name: String) {
     }
     else Log.debug(s"(state $toString) no instance to add")
   }
+  def cancelFeasibleInstances = {
+    feasibleInstances = Map.empty
+  }
   def waitingInstanceNum: Int = {
     var num = 0
     waitingInstances.foreach(i => num = num + i._2)
@@ -58,7 +69,7 @@ class State (val name: String) {
   def disabled(id: Int): Boolean = !waitingInstances.contains(id)
   def disableTimeout = synchronized {
     if(!waitingInstances.isEmpty) {
-      Log.debug("disable timeout in " + this.toString)
+      Log.debug("disabled timeout in " + this.toString)
       if(real) reduceRealTimeInstances(waitingInstanceNum)
       waitingInstances = Map.empty
     }
@@ -77,7 +88,6 @@ class State (val name: String) {
         this.timeout = Some(t)
         real = t.real
       }
-      
       t.subTopic match {
         case Some(topic) =>
           subTopics = subTopics + (topic -> t)
@@ -113,33 +123,18 @@ class State (val name: String) {
   }
   def reduceInstances(n: Int) = {
     instanceNum -= n
-    assert (instanceNum >= 0)
+    if(instanceNum < 0)
+      Log.error(s"(state $toString) number of instances is negative")
   }
 
   //Assign instances. If no transition is available and timeout is setted, register instances to scheduler.
   def assignInstances(n: Int) = {
     instanceNum += n
     Log.info(s"$instanceNum instance(s) are in state ${this.toString}.")
-    var remain = n
     if(!availableTransitions.isEmpty) {
-      var s = "(state " + this.toString + ") availableTransitions: "
-      for(tr <- availableTransitions) {
-        s = s + tr.toString+","
-      }
-      val totalW = totalWeight(availableTransitions)
-      Log.debug(s + " total weight = " + totalW)
-      val rnd = scala.util.Random.shuffle(availableTransitions)
-      for(t <- rnd) {
-        val tN = (n * t.action.weight / totalW).toInt
-        if(tN > 0) {
-          addFeasibleInstances(t, tN)
-          remain = remain - tN
-        }
-      }
-      addFeasibleInstances(rnd.head, remain)
-
+      assignFreeInstToTrans(n)
     } else {
-      viewTransitions
+      //viewTransitions
       //オブジェクトの
       timeout match {
         case Some(t) =>
@@ -150,6 +145,25 @@ class State (val name: String) {
           Log.debug(s"(state ${this.toString}) freeInstanceNum = $freeInstanceNum")
       }
     }
+  }
+  def assignFreeInstToTrans(n: Int) {
+    var remain = n
+    var s = "(state " + this.toString + ") availableTransitions: "
+    for(tr <- availableTransitions) {
+      s = s + tr.toString+","
+    }
+    val totalW = totalWeight(availableTransitions)
+    //Log.debug(s + " total weight = " + totalW)
+    val rnd = scala.util.Random.shuffle(availableTransitions)
+    for(t <- rnd) {
+      val tN = (n * t.action.weight / totalW).toInt
+      if(tN > 0) {
+        addFeasibleInstances(t, tN)
+        remain = remain - tN
+      }
+    }
+    addFeasibleInstances(rnd.head, remain)
+  }
 
   def assignTimeout(t:Transition, n: Int) {
     t.action.waitTime match {
@@ -167,7 +181,6 @@ class State (val name: String) {
           }
         }
       case None => 
-      }
     }
   }
 
@@ -198,12 +211,13 @@ class State (val name: String) {
   }
 
   def messageArrived(topic: String, msg: String) {
-    messageBuffer = messageBuffer + (topic -> msg)
+    messageBuffer = msg
     var trans = subTopics(topic)
     Log.debug(s"(state ${this.toString} messageArrived) message arrived from topic $topic: $msg")
     Log.debug(s"(state $toString) waitingInstanceNum = $waitingInstanceNum, freeInstanceNum = $freeInstanceNum")
-    addFeasibleInstances(trans, waitingInstanceNum + freeInstanceNum)
+    cancelFeasibleInstances
     disableTimeout
+    addFeasibleInstances(trans, instanceNum)
     freeInstanceNum = 0
   }
 

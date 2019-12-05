@@ -66,8 +66,8 @@ object Modbat {
   val testFailures =
     new HashMap[(TransitionResult, String), ListBuffer[Long]]()
   var isUnitTest = true
-  val sleepTime = 1000
-  var slept = false
+  //var slept = false
+  var executeAll = false
 
   def init {
     // reset all static variables
@@ -353,55 +353,75 @@ object Modbat {
 
   def allSuccStates(givenModel: MBT): Array[(MBT, State)] = {
     val result = new ArrayBuffer[(MBT, State)]()
-    //handle messages from topics
+
     MessageHandler.mesLock.synchronized {
-      for(topic <- MessageHandler.arrivedTopic) {
-        if(MessageHandler.topics.contains(topic)) {
-          for(state <- MessageHandler.topics(topic)) {
-            state.messageArrived(topic, MessageHandler.messages(topic))
-          }
-        } else {
-          Log.error(s"Subscribing topic $topic, but no transition is waiting for it.")
-        }
-      }
-      MessageHandler.arrivedTopic = Set.empty
-    }
-    if (givenModel == null) {
-      for (m <- MBT.launchedModels filterNot (_ isObserver) filter (_.joining == null)) {
-        addSuccStates(m, result)
-      }
-      //Log.debug("(allSuccStates) result.isEmpty = "+result.isEmpty)
-      if (result.isEmpty) {
-        MBT.time.scheduler.timeUntilNextTask match {
-          case Some(s) => {
-            if(s > 0.millis) {
-              if(!slept) {
-                if(MBT.realTimeInstances > 0) {//real time wait
-                  var now = System.currentTimeMillis()
-                  var diff = now - MBT.realMillis
-                  if(diff < s.toMillis) {
-                    Thread.sleep(s.toMillis - diff)
-                  }
-                  MBT.realMillis = MBT.realMillis + s.toMillis
-                  Log.debug("real time sleep")
-                }
-              } else {
-                Log.debug("virtual time advance "+s)
-                Log.debug("time elapsed = "+ MBT.time.elapsed)
-                MBT.time.advance(s)
+      //handle messages arrived from topics
+      while(!MessageHandler.arrivedTopic.isEmpty) {
+        //if subscribed message, 
+        for(topic <- MessageHandler.arrivedTopic) {
+          Log.debug(s"(allSuccStates) handling message from topic $topic...")
+          if(MessageHandler.topics.contains(topic)) {
+            for(state <- MessageHandler.topics(topic)) {
+              if(state.instanceNum > 0) {
+                Log.debug(s"(allSuccStates) ${state.instanceNum} instance(s) in ${state.toString} are subscribing $topic")
+                state.messageArrived(topic, MessageHandler.messages(topic))
+                result += Tuple2(state.model, state)
               }
-              slept = !slept
-            } else MBT.time.scheduler.tick()
+            }
+          } else {
+            Log.error(s"Subscribing topic $topic, but no transition is waiting for it.")
           }
-          case None => return Array.empty
+          MessageHandler.arrivedTopic -= topic
+          if(!result.isEmpty) {
+            executeAll = true
+            return result.toArray
+          }
         }
-        return allSuccStates(givenModel)
       }
-    } else {
-      if (givenModel.joining == null) {
-        addSuccStates(givenModel, result)
+      for(topic <- MessageHandler.arrivedTopic) {
       }
-    }
+
+      if (givenModel == null) {
+        for (m <- MBT.launchedModels filterNot (_ isObserver) filter (_.joining == null)) {
+          addSuccStates(m, result)
+        }
+        if (result.isEmpty) {
+          MBT.time.scheduler.timeUntilNextTask match {
+            case Some(s) => {
+              if(s > 0.millis) {
+                if(MBT.realTimeInstances > 0) {//real time wait
+                  var diff = System.currentTimeMillis() - MBT.realMillis
+                  var sleepTime = s.toMillis - diff
+                  if(sleepTime > 0) {
+                    Log.debug(s"allSuccessors: start real time wait (timeout in $s)")
+                    MessageHandler.mesLock.wait(sleepTime)
+                    val now = System.currentTimeMillis()
+                    diff = now - MBT.realMillis
+                    Log.info(s"real time sleep (${diff} millis)")
+                    MBT.time.advance(diff)
+                    MBT.realMillis = now
+                  } else {
+                    MBT.time.advance(s)
+                    println(s"time advance (${s} millis)")
+                    MBT.realMillis = MBT.realMillis + s.toMillis
+                  }
+                } else {
+                  Log.debug("virtual time advance "+s)
+                  Log.debug("time elapsed = "+ MBT.time.elapsed)
+                  MBT.time.advance(s)
+                }
+              } else MBT.time.scheduler.tick()
+            }
+            case None => return Array.empty
+          }
+          return allSuccStates(givenModel)
+        }
+      } else {
+        if (givenModel.joining == null) {
+          addSuccStates(givenModel, result)
+        }
+      }
+    }//end of mesLock.synchronize 
     result.toArray
   }
 
@@ -449,33 +469,43 @@ object Modbat {
   }
   def exploreSuccessors: (TransitionResult, RecordedTransition) = {
     var succStates: Array[(MBT, State)] = allSuccStates(null)
-    //while (!successors.isEmpty && (totalW > 0 || !MBT.transitionQueue.isEmpty)) {
+    var backtracked = false
+
     while(!succStates.isEmpty) {
       Log.info("exploreSuccessors")
       if (MBT.rng.nextFloat(false) < Main.config.abortProbability) {
 	      Log.debug("Aborting...")
 	      return (Ok(), null)
       }
-      val rand = new Random(System.currentTimeMillis())
-      val successorState:(MBT, State) = succStates(rand.nextInt(succStates.length))
-      val model = successorState._1
-      val state = successorState._2
-      val fI:Map[modbat.dsl.Transition, Int] = state.feasibleInstances
-      state.feasibleInstances = Map.empty
-      for(ins <- fI) {
-        val trans: Transition = ins._1
-        val n: Int = ins._2
-        val result = model.executeTransitionRepeat(trans, n)
-        if(TransitionResult.isErr(result._1)) {
-      	  printTrace(executedTransitions.toList)
-          return result
+      if(executeAll) {
+        Log.debug("execute all transitions with subscription")
+        executeAll = false
+      } else {
+        val rand = new Random(System.currentTimeMillis())
+        val randN = rand.nextInt(succStates.length)
+        //val successorState:(MBT, State) = succStates(rand.nextInt(succStates.length))
+        succStates = succStates.slice(randN, randN + 1)
+      }
+      for(successorState <- succStates) {
+        val model = successorState._1
+        val state = successorState._2
+        val fI:Map[modbat.dsl.Transition, Int] = state.feasibleInstances
+        state.cancelFeasibleInstances
+        for(ins <- fI) {
+          val trans: Transition = ins._1
+          val n: Int = ins._2
+          val result = model.executeTransitionRepeat(trans, n)
+          if(TransitionResult.isErr(result._1)) {
+            printTrace(executedTransitions.toList)
+            return result
+          }
         }
       }
       succStates = allSuccStates(null)
     }
   
     Log.debug("No more successors.")
-    slept = false
+    //slept = false
     Transition.pendingTransitions.clear
     // in case a newly constructed model was never launched
     //TODO: ここをassertion handleするように治す 元のModbat.scalaの476行目以降。case ((OK(), ...)) 

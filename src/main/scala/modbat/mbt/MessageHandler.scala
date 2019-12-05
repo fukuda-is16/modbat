@@ -41,16 +41,14 @@ object MessageHandler {
     val mqttTopic = client.getTopic(topic)
     val message = new MqttMessage(msg.getBytes())
     message.setQos(qos)
-    //avoid [ERROR]Too many publishes in progress (32202)
-    if(n > connOpts.getMaxInflight) connOpts.setMaxInflight(n)
+    if(n > connOpts.getMaxInflight) connOpts.setMaxInflight(n)//avoid [ERROR]Too many publishes in progress (32202)
     for(i <- 1 to n) mqttTopic.publish(message).waitForCompletion
-    Log.debug(s"published $msg $n time(s) to $topic")
+    Log.debug(s"published message $n time(s) to topic $topic: $msg")
   }
-  //TODO: テストが一回終わった時にコネクションを閉じたりtopicsを消去したりする
+
   def clear {
     if(useMqtt) {
       client.disconnect()
-      //Log.debug("mqtt client disconnected")
     }
     mesLock.synchronized {
       topics = Map.empty
@@ -59,15 +57,17 @@ object MessageHandler {
     }
     useMqtt = false
   }
-  //TODO:テストを終了するたびにスレッドも終了させる
   //TODO:リアルタイムにデバッグ情報を表示
   class Callback extends MqttCallback {
     def connectionLost(e: Throwable) {
       Log.info("connection lost")
+      mesLock.synchronized {
+        mesLock.notify()
+      }
       e.printStackTrace
     }
     def deliveryComplete(token: IMqttDeliveryToken) {
-      Log.info(s"delivery complete")//: ${token.getMessage}")
+      Log.debug(s"deliveryComplete")//: message = ${token.getMessage}")
     }
     /*
      * TODO: 来たことをメインスレッドに教えるだけにして、処理はメインスレッドで行うほうが安全
@@ -75,10 +75,11 @@ object MessageHandler {
     def messageArrived(topic: String, message: MqttMessage) {
       //just store messages here, handle these messages in Modbat.allSuccStates
       val msg = message.toString
-      Log.debug(s"(MessageHandler) message arrived from $topic: $msg")
+      Log.debug(s"(MessageHandler) message arrived from topic $topic: $msg")
       mesLock.synchronized {
         messages = messages + (topic -> msg)
         arrivedTopic += topic
+        mesLock.notify()
       }
     }
   }

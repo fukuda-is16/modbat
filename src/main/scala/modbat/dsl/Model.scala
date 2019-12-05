@@ -5,6 +5,7 @@ import modbat.cov.TransitionCoverage
 import modbat.log.Log
 import modbat.RequirementFailedException
 import scala.language.implicitConversions
+//import scala.concurrent.duration._
 
 object Model {
   // TODO: if not run in Modbat main thread, also handle assertion failure
@@ -17,7 +18,6 @@ object Model {
       // do not set this flag in Modbat thread as functions that are
       // expected to throw an assertion failure would otherwise mistakenly
       // mark a test as failed
-      println("assert(): Thread.currentThread != MBT.currentThread = "+(Thread.currentThread != MBT.modbatThread))
       if (Thread.currentThread != MBT.modbatThread) {
       	MBT.synchronized {
 	        val e = new AssertionError("Assertion failed in Thread " +
@@ -84,9 +84,9 @@ abstract trait Model {
     TransitionCoverage.precond(requirement)
     if (!requirement) {
       if (message == null) {
-	throw new RequirementFailedException("requirement failed")
+      	throw new RequirementFailedException("requirement failed")
       } else {
-	throw new RequirementFailedException("requirement failed: " + message)
+	      throw new RequirementFailedException("requirement failed: " + message)
       }
     }
   }
@@ -116,19 +116,33 @@ abstract trait Model {
   }
 
   var instanceNum: Int = 1
-  final def setInstanceNum(n: Int) = {instanceNum = n}
+  def setInstanceNum(n: Int) = instanceNum = n
   //send message to Mqtt server 
-  final def publish(topic: String, msg: String) {
+  def instanceNumInState(s: String): Int = {
+    efsm.states.get(s) match {
+      case Some(state) => state.instanceNum
+      case None => 
+        Log.warn(s"hasInstanceInState: State named $s does not exist in model ${efsm.className}")
+        0
+    }
+  }
+  def instanceNumInStates(l: List[String]): Int = 
+    l.foldLeft(0)((n, s) => n + instanceNumInState(s))
+  def hasInstanceInState(s: String): Boolean = instanceNumInState(s) > 0
+  def hasInstanceInStates(l: List[String]): Boolean = instanceNumInStates(l) > 0
+  def publish(topic: String, msg: String) {
     MessageHandler.publishRepeat(topic, msg, MBT.currentTransitionInstanceNum)
   }
-  final def getMessage = {
+  def getMessage = {
     val trans = MBT.currentTransition
     trans.subTopic match {
       case Some(topic) =>
-        MessageHandler.messages(topic)
+        trans.origin.messageBuffer
+        //MessageHandler.messages(topic)
       case None =>
         Log.error(s"calling getMqttMessage with no subscription at transition ${trans.toString}")
         ""
     }
   }
+  def getVirtualTime: Long = MBT.time.elapsed.toMillis
 }

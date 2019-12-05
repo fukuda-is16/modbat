@@ -3,8 +3,7 @@ buildscript {
   repositories {
     maven {
       url "https://plugins.gradle.org/m2/"
-      url "https://repo.eclipse.org/content/repositories/paho-releases/"/*  */
-      /* url "https://repo.eclipse.org/content/repositories/paho-snapshots/" */
+      url "https://repo.eclipse.org/content/repositories/paho-releases/"
     }
   }
   dependencies {
@@ -70,7 +69,7 @@ jar {
     }
     from "LICENSE", "README", "CHANGELOG", "asm-LICENSE"
     from configurations.runtimeClasspath.
-                                         findAll { it.name.endsWith('jar') && (it.name.contains('asm') || it.name.contains('config') || it.name.contains('akka')/**/ || it.name.contains('paho')/**/) }.
+                                         findAll { it.name.endsWith('jar') && (it.name.contains('asm') || it.name.contains('config') || it.name.contains('akka') || it.name.contains('paho')) }.
                                          collect { zipTree(it) }
 }
 

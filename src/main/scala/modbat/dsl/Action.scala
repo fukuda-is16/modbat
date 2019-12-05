@@ -18,6 +18,7 @@ class Action(val transfunc: () => Any, val method: Method = null) {
   var real = false //wait with real time
   //subscribe
   var subTopic: Option[String] = None
+  var guardFunc = () => true //this function is currently not used
 
   def nonDetExceptions = nonDetExc.toList
 
@@ -84,6 +85,12 @@ class Action(val transfunc: () => Any, val method: Method = null) {
 
   def subscribe(topic: String): Action = {
     subTopic = Some(topic)
+    this
+  }
+
+  //TODO: implement guard. usage is like require, but write this outside transfunc
+  def guard(cond: Boolean): Action = {
+    guardFunc = () => cond
     this
   }
 

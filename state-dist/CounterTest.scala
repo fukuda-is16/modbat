@@ -25,7 +25,7 @@ class CounterTest extends Model {
   "init" -> "init" := {
     assert(counter.get == model)
     printf("get\n")
-  } label "get"
+  } label "get" subscribe ("topic")
 
   "init" -> "end" := {
     printf("end\n")

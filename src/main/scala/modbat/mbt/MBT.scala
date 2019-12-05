@@ -608,7 +608,7 @@ class MBT (val model: Model, val trans: List[Transition]) {
     val topic = tr.subTopic.getOrElse("(None)")
     val timeout = tr.waitTime.getOrElse((0,0))
     Log.debug(s"$name: Registered transition ${tr.toString} from ${tr.origin} to ${tr.dest}, subscribe = $topic, timeout = $timeout, realTimeout = ${tr.real}")
-    tr.origin.viewTransitions
+    //tr.origin.viewTransitions
     if (MBT.checkDuplicates && !ignoreDuplicates) {
       val label = tr.action.label
       if (!label.isEmpty) {
@@ -790,7 +790,7 @@ class MBT (val model: Model, val trans: List[Transition]) {
     var result: List[State] = List.empty
     for(s <- states) {
       val st:State = s._2
-      if(!st.feasibleInstances.isEmpty && st.instanceNum > 0) result = st :: result
+      if(st.feasible) result = st :: result
     }
     result
   }
@@ -823,7 +823,6 @@ class MBT (val model: Model, val trans: List[Transition]) {
         MBT.currentTransition = successor
         MBT.currentTransitionInstanceNum = n
 	      TransitionCoverage.prep(successor)
-        //for (i <- 1 to n) successor.action.transfunc()//TODO:1度だけ実行　外界へのアクション(現在はpublishのみ)は多重度nを見てn回実行
 	      successor.action.transfunc()
         if (!successor.expectedExceptions.isEmpty) {
 	        Log.warn("Expected exception did not occur, aborting.")
@@ -846,7 +845,6 @@ class MBT (val model: Model, val trans: List[Transition]) {
 	        }
 	      }
         case e: Throwable => {
-          Log.debug("handle")
           handle(e, successor)
         }
       }
