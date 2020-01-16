@@ -81,7 +81,7 @@ object MBT {
   var currentTransition: Transition = null
   var currentTransitionInstanceNum = 0
   val time = new VirtualTime
-  @volatile var realTimeInstances = 0 //count number of instances waiting by real time
+  @volatile var realInst = 0 //count number of instances waiting by real time
   @volatile var realMillis: Long = 0
 
   def init {

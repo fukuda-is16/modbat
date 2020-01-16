@@ -31,13 +31,13 @@ class State (val name: String) {
   var timeout: Option[Transition] = None
   var real = false
 
-  def addRealTimeInstances(n: Int = 1) = {
-    if(MBT.realTimeInstances == 0) MBT.realMillis = System.currentTimeMillis()
-    MBT.realTimeInstances += n
+  def addRealInst(n: Int = 1) = {
+    if(MBT.realInst == 0) MBT.realMillis = System.currentTimeMillis()
+    MBT.realInst += n
   }
-  def reduceRealTimeInstances(n: Int = 1) = {
-    MBT.realTimeInstances -= n
-    if(MBT.realTimeInstances < 0) {
+  def reduceRealInst(n: Int = 1) = {
+    MBT.realInst -= n
+    if(MBT.realInst < 0) {
       Log.error("real time tasks shouldn't be negative")
       System.exit(1)
     }
@@ -70,7 +70,7 @@ class State (val name: String) {
   def disableTimeout = synchronized {
     if(!waitingInstances.isEmpty) {
       Log.debug("disabled timeout in " + this.toString)
-      if(real) reduceRealTimeInstances(waitingInstanceNum)
+      if(real) reduceRealInst(waitingInstanceNum)
       waitingInstances = Map.empty
     }
   }
@@ -191,7 +191,7 @@ class State (val name: String) {
         waitingInstances = waitingInstances + (id -> n)
       }
       val task = new TimeoutTask(t, n, id)
-      if(real) addRealTimeInstances(n)
+      if(real) addRealInst(n)
       Log.debug(s"registered task to execute ${t.toString} for $n instances in $time millis")
       MBT.time.scheduler.scheduleOnce(time.millis)(task.run())
     }
@@ -202,7 +202,7 @@ class State (val name: String) {
       if(!disabled(id)) {
         Log.debug(s"add timeout transition ${t.toString} to feasibleInstances")
         addFeasibleInstances(t, n)
-        if(real) reduceRealTimeInstances(n)
+        if(real) reduceRealInst(n)
       }
       synchronized {
         waitingInstances = waitingInstances - id
