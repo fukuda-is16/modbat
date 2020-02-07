@@ -2,7 +2,7 @@
 MODBAT_PATH := ..
 MODBAT := $(MODBAT_PATH)/build/modbat.jar
 OPTION := -n=5 --log-path=./log --log-level=all
-MODEL := MeterAssertion#BrokenWattMeter#TimeLagTest#WattMeter#MessageTest#MaxInFlightTest
+MODEL := VirtualController1000Instances#MeterAssertion#BrokenWattMeter#TimeLagTest#WattMeter#MessageTest#MaxInFlightTest
 
 all:
 	cd $(MODBAT_PATH); ./gradlew build -x test
@@ -19,7 +19,9 @@ run:
 	mkdir -p log
 	@make cleanlog
 	scala -cp .:$(MODBAT) $(MODBAT) $(OPTION) $(MODEL)
-clean:
+cleanlog:
 	find -name "*.log" | xargs rm -f
 	find -name "*.err" | xargs rm -f
+clean:
+	make cleanlog
 	find -name "*.class" | xargs rm -f
