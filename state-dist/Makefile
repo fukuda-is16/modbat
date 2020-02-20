@@ -1,8 +1,8 @@
 #開発用 modbatを修正した時はallを、モデルだけ修正した時はmqtttestを使用
 MODBAT_PATH := ..
 MODBAT := $(MODBAT_PATH)/build/modbat.jar
-OPTION := -n=5 --log-path=./log --log-level=all
-MODEL := VirtualController1000Instances#MeterAssertion#BrokenWattMeter#TimeLagTest#WattMeter#MessageTest#MaxInFlightTest
+OPTION := -n=5 --log-path=./log --log-level=info
+MODEL := CounterTest
 
 all:
 	cd $(MODBAT_PATH); ./gradlew build -x test
@@ -25,3 +25,4 @@ cleanlog:
 clean:
 	make cleanlog
 	find -name "*.class" | xargs rm -f
+	find -name "paho*" | xargs rm -rf
