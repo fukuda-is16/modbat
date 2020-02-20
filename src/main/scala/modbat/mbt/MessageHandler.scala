@@ -17,6 +17,7 @@ object MessageHandler {
   val mesLock = new AnyRef
   var defaultQos = 1
 
+  //subscribe topics described in test models
   def regTopic(topic: String, state: State, qos: Int = defaultQos) = {
     if(!useMqtt) {
       useMqtt = true
@@ -41,7 +42,7 @@ object MessageHandler {
     val mqttTopic = client.getTopic(topic)
     val message = new MqttMessage(msg.getBytes())
     message.setQos(qos)
-    if(n > connOpts.getMaxInflight) connOpts.setMaxInflight(n)//avoid [ERROR]Too many publishes in progress (32202)
+    if(n > connOpts.getMaxInflight) connOpts.setMaxInflight(n)//avoid error: Too many publishes in progress (32202)
     for(i <- 1 to n) mqttTopic.publish(message).waitForCompletion
     Log.debug(s"published message $n time(s) to topic $topic: $msg")
   }
@@ -57,7 +58,7 @@ object MessageHandler {
     }
     useMqtt = false
   }
-  //TODO:リアルタイムにデバッグ情報を表示
+
   class Callback extends MqttCallback {
     def connectionLost(e: Throwable) {
       Log.info("connection lost")
@@ -67,11 +68,9 @@ object MessageHandler {
       e.printStackTrace
     }
     def deliveryComplete(token: IMqttDeliveryToken) {
-      Log.debug(s"deliveryComplete")//: message = ${token.getMessage}")
+      Log.debug(s"deliveryComplete")
     }
-    /*
-     * TODO: 来たことをメインスレッドに教えるだけにして、処理はメインスレッドで行うほうが安全
-     */
+
     def messageArrived(topic: String, message: MqttMessage) {
       //just store messages here, handle these messages in Modbat.allSuccStates
       val msg = message.toString

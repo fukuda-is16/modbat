@@ -5,7 +5,6 @@ import modbat.cov.TransitionCoverage
 import modbat.log.Log
 import modbat.RequirementFailedException
 import scala.language.implicitConversions
-//import scala.concurrent.duration._
 
 object Model {
   // TODO: if not run in Modbat main thread, also handle assertion failure

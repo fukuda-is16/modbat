@@ -10,26 +10,19 @@ class State (val name: String) {
   override def toString = name
   var coverage: StateCoverage = _
 
-//TODO:  New feature (guard)
-/*
-  var freeInstanceNum: Int = 0 //instances waiting for "subscribe" transitions or normal transitions to be enabled
-  @volatile var waitingInstances: Map[Int, Int] = Map.empty//key: id, value: instanceNum
-  var timeoutInstanceNum: Int = 0//instances reserved to execute timeout transition
-  var subscribedInstances: Map[Trans, Int] = Map.empty //map of instances reserved to execute some "subscribe" transition
-*/
   var instanceNum = 0
   var feasibleInstances: Map[Transition, Int] = Map.empty
   def feasible = instanceNum > 0 && !feasibleInstances.isEmpty
   @volatile var waitingInstances: Map[Int, Int] = Map.empty//key: id, value: (instanceNum,disabled)
   var freeInstanceNum = 0 //instances with no feasible transition
   var transitions: List[Transition] = List.empty
-  var subTopics: Map[String, Transition] = Map.empty
+  var subTopics: Map[String, Transition] = Map.empty //topics subscribing in this state
   var messageBuffer: String = ""
-  var timeSlice = 11//slices we make when waiting for timeout
+  var timeSlice = 11
   var timeoutId = 0
   var model: MBT = _
   var timeout: Option[Transition] = None
-  var real = false
+  var real = false //if the timeout is real (=true) or virtual (=false)
 
   def addRealInst(n: Int = 1) = {
     if(MBT.realInst == 0) MBT.realMillis = System.currentTimeMillis()
@@ -134,8 +127,6 @@ class State (val name: String) {
     if(!availableTransitions.isEmpty) {
       assignFreeInstToTrans(n)
     } else {
-      //viewTransitions
-      //オブジェクトの
       timeout match {
         case Some(t) =>
           Log.debug("assign timeout")
@@ -153,7 +144,6 @@ class State (val name: String) {
       s = s + tr.toString+","
     }
     val totalW = totalWeight(availableTransitions)
-    //Log.debug(s + " total weight = " + totalW)
     val rnd = scala.util.Random.shuffle(availableTransitions)
     for(t <- rnd) {
       val tN = (n * t.action.weight / totalW).toInt
@@ -210,6 +200,10 @@ class State (val name: String) {
     }
   }
 
+  /*
+   * called when an MQTT message arrives
+   * cancel timeout and assigen instances to the subscription-triggered transition
+   */
   def messageArrived(topic: String, msg: String) {
     messageBuffer = msg
     var trans = subTopics(topic)
