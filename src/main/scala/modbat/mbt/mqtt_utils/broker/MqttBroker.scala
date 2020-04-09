@@ -17,12 +17,12 @@ class MqttBroker {
   }
 
   def subscribe(s: String, qos: Int = 1):Unit = {
-    assert(running)
+    assert(running, "MqttBroker is not running")
     brokerCore.regTask(new Subscribe(s))
   }
 
   def publish(topic: String, message: String): Unit = {
-    assert(running)
+    assert(running, "MqttBroker is not running")
     brokerCore.regTask(new Publish(topic, message))
   }
 

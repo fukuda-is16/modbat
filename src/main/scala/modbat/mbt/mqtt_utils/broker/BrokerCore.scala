@@ -50,6 +50,7 @@ class BrokerCore extends Runnable {
   def regTask(t: Task): Unit = {
     this.synchronized {
       tasks.append(t)
+      notify()
     }
   }
 }
