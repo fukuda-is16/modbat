@@ -1,5 +1,5 @@
 package modbat.mbt.mqtt_utils.client
-package modbat.mbt.mqtt_utils.broker.MqttBroker
+import modbat.mbt.mqtt_utils.broker.MqttBroker
 
 /*
 object MqttClient {
@@ -12,11 +12,11 @@ class MqttClient(/*dest: MqttServer, clientId: Int = 1*/) {
   var callback: MqttCallback = _
 
   def subscribe(topic: String, qos: Int = 1):Unit = {
-    dest.subscribe(topic, qos)
+    broker.subscribe(topic, qos)
   }
 
   def setCallback(cb: MqttCallback):Unit = {
-    // let broker handle callback operation on behalf
+    // message-arrived callback is handled by broker
     callback = cb
   }
 

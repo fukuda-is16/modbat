@@ -9,8 +9,8 @@ class BrokerCore extends Runnable {
   var exit = false
   def run() = {
     while(!exit) {
-      var t: Task = _
-      synchronized(tasks) {
+      var t: Task = null
+      this.synchronized {
         if (tasks.isEmpty) {
           wait()
         }
@@ -20,28 +20,36 @@ class BrokerCore extends Runnable {
     }
   }
 
-  def doTask(t: Task): Unit = match t {
-    case Connect(c, cb) => client = c
-    case s: Stop => exit = true
-    case s: Subscribe(s) => topics += s
-    case s: Publish => ???
+  def doTask(t: Task): Unit = t match {
+    case Connect(c) => client = c
+    case Stop => exit = true
+    case Subscribe(s) => topics += s
+    case Publish(topic: String, message: String) => {
+      if (topics(topic)) {
+        client.callback.messageArrived(topic, message)
+      }
+    }
   }
 
 
   def stop(): Unit = {
-    synchronized(this) {
+    this.synchronized {
       tasks.clear()
-      tasks += new Stop
+      tasks += Stop
+      notify()
+    }
+  }
+
+  def reset(): Unit = {
+    this.synchronized {
+      tasks.clear()
       notify()
     }
   }
 
   def regTask(t: Task): Unit = {
-    synchronized(this) {
+    this.synchronized {
       tasks.append(t)
     }
   }
-}
-
-
 }
