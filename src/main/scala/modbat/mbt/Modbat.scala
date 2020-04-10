@@ -267,47 +267,43 @@ object Modbat {
   }
 
   def runTests(n: Int) {
-    try {
-      for (i <- 1 to n) {
-         MBT.rng = masterRNG.clone
-         // advance RNG by one step for each path
-         // so each path stays the same even if the length of other paths
-         // changes due to small changes in the model or in this tool
-         randomSeed = getRandomSeed
-         val seed = randomSeed.toHexString
-         failed match {
-         	case 0 => Console.printf("%8d %16s", i, seed)
-   	      case 1 => Console.printf("%8d %16s, one test failed.", i, seed)
-   	      case _ => Console.printf("%8d %16s, %d tests failed.",
-   				 i, seed, failed)
-         }
-         logFile = Main.config.logPath + "/" + seed + ".log"
-         errFile = Main.config.logPath + "/" + seed + ".err"
-         if (Main.config.redirectOut) {
-   	      out = new PrintStream(new FileOutputStream(logFile))
-       	  System.setOut(out)
-   	      err = new PrintStream(new FileOutputStream(errFile), true)
-         	System.setErr(err)
-         } else {
-         	Console.println
-         }
-         MBT.checkDuplicates = (i == 1)
-         val result = runTest
-         count = i
-         restoreChannels
-         if (TransitionResult.isErr(result)) {
-   	      failed += 1
-         } else {
-         	assert (result == Ok())
-         }
-         masterRNG.nextInt(false) // get one iteration in RNG
-         if (TransitionResult.isErr(result) && Main.config.stopOnFailure) {
-   	      return
-         }
+    for (i <- 1 to n) {
+       MBT.rng = masterRNG.clone
+       // advance RNG by one step for each path
+       // so each path stays the same even if the length of other paths
+       // changes due to small changes in the model or in this tool
+       randomSeed = getRandomSeed
+       val seed = randomSeed.toHexString
+       failed match {
+       	case 0 => Console.printf("%8d %16s", i, seed)
+ 	      case 1 => Console.printf("%8d %16s, one test failed.", i, seed)
+ 	      case _ => Console.printf("%8d %16s, %d tests failed.",
+ 				 i, seed, failed)
        }
-    } finally {
-      MessageHandler.stopBroker()
-    }
+       logFile = Main.config.logPath + "/" + seed + ".log"
+       errFile = Main.config.logPath + "/" + seed + ".err"
+       if (Main.config.redirectOut) {
+ 	      out = new PrintStream(new FileOutputStream(logFile))
+     	  System.setOut(out)
+ 	      err = new PrintStream(new FileOutputStream(errFile), true)
+       	System.setErr(err)
+       } else {
+       	Console.println
+       }
+       MBT.checkDuplicates = (i == 1)
+       val result = runTest
+       count = i
+       restoreChannels
+       if (TransitionResult.isErr(result)) {
+ 	      failed += 1
+       } else {
+       	assert (result == Ok())
+       }
+       masterRNG.nextInt(false) // get one iteration in RNG
+       if (TransitionResult.isErr(result) && Main.config.stopOnFailure) {
+ 	      return
+       }
+     }
   }
 
   def showTrans(t: RecordedTransition) = {

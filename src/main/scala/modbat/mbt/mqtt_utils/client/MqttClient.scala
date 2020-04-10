@@ -7,12 +7,21 @@ object MqttClient {
 }
 */
 
-class MqttClient(/*dest: MqttServer, clientId: Int = 1*/) {
+object MqttClient {
+  var i: Int = 0
+  def generateClientId() = {
+    i += 1
+    i.toString
+  }
+}
+
+class MqttClient(dest: String, clientId: String) {
   var broker: MqttBroker = _
   var callback: MqttCallback = _
+  var isConnected = false
 
   def subscribe(topic: String, qos: Int = 1):Unit = {
-    broker.subscribe(topic, qos)
+    broker.subscribe(clientId, topic, qos)
   }
 
   def setCallback(cb: MqttCallback):Unit = {
@@ -20,9 +29,9 @@ class MqttClient(/*dest: MqttServer, clientId: Int = 1*/) {
     callback = cb
   }
 
-  def connect(b: MqttBroker): Unit = {
-    broker = b
-    broker.regClient(this)
+  def connect(connOpts: MqttConnectOptions): Unit = {
+    MqttBroker.connect(this, clientId, dest)
+    isConnected = true
   }
 
   def getTopic(topic: String): MqttTopic = {
@@ -31,6 +40,7 @@ class MqttClient(/*dest: MqttServer, clientId: Int = 1*/) {
   }
 
   def disconnect() = {
-    broker.reset()
+    broker.disconnect(clientId)
+    isConnected = false
   }
 }

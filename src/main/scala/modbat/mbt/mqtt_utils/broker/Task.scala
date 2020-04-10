@@ -3,6 +3,8 @@ import modbat.mbt.mqtt_utils.client.MqttClient
 
 sealed trait Task
 case object Stop extends Task
-case class Subscribe(s: String) extends Task
-case class Connect(c: MqttClient) extends Task
+case object Reset extends Task
+case class Subscribe(id: String, topic: String) extends Task
 case class Publish(topic: String, message: String) extends Task
+case class Connect(c: MqttClient, id: String) extends Task
+case class Disconnect(id: String) extends Task

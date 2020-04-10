@@ -1,11 +1,12 @@
 package modbat.mbt.mqtt_utils.broker
-import scala.collection.mutable.ArrayBuffer
-import modbat.mbt.mqtt_utils.client.MqttClient
+import scala.collection.mutable.{ArrayBuffer, Map, Set}
+import modbat.mbt.mqtt_utils.client.{MqttClient, MqttMessage}
+
 
 class BrokerCore extends Runnable {
   val tasks = ArrayBuffer[Task]()
-  val topics = scala.collection.mutable.Set[String]()
-  var client: MqttClient = _
+  val topics = Map[String, Set[String]]()
+  val clientMap = Map[String, MqttClient]()
   var exit = false
   def run() = {
     while(!exit) {
@@ -21,13 +22,27 @@ class BrokerCore extends Runnable {
   }
 
   def doTask(t: Task): Unit = t match {
-    case Connect(c) => client = c
-    case Stop => exit = true
-    case Subscribe(s) => topics += s
+    case Connect(c, id) => clientMap += (id -> c)
+    case Disconnect(id) => {
+      clientMap -= id
+      for((topic, idSet) <- topics) idSet -= id
+    }
+    case Subscribe(id, topic) => {
+      if (!(topics contains topic)) topics += (topic -> Set[String](id))
+      else topics(topic) += id
+    }
     case Publish(topic: String, message: String) => {
-      if (topics(topic)) {
-        client.callback.messageArrived(topic, message)
+      if (topics contains topic) {
+        for(id <- topics(topic)) {
+          val client = clientMap(id)
+          client.callback.messageArrived(topic, new MqttMessage(message.getBytes))
+        }
       }
+    }
+    case Stop => exit = true
+    case Reset => {
+      topics.clear()
+      clientMap.clear()
     }
   }
 
@@ -43,6 +58,7 @@ class BrokerCore extends Runnable {
   def reset(): Unit = {
     this.synchronized {
       tasks.clear()
+      tasks += Reset
       this.notify()
     }
   }

@@ -1,7 +1,28 @@
 package modbat.mbt.mqtt_utils.broker
-import modbat.mbt.mqtt_utils.client.MqttClient
+import modbat.mbt.mqtt_utils.client.{MqttClient, MqttMessage}
 
-class MqttBroker {
+object MqttBroker {
+  val brokerMap = collection.mutable.Map[String, MqttBroker]()
+  def connect(c: MqttClient, id: String, dest: String) = {
+    var broker: MqttBroker = brokerMap get dest match {
+      case None => {
+        val bt = new MqttBroker(dest)
+        bt.start()
+        brokerMap(dest) = bt
+        bt
+      }
+      case Some(b) => b
+    }
+    c.broker = broker
+    broker.addClient(c, id)
+  }
+  def reset(): Unit = {
+    for((_, broker) <- brokerMap) broker.reset()
+  }
+}
+
+
+class MqttBroker(dest: String) {
   var running: Boolean = false
   var brokerCore = new BrokerCore()
   var thread: Thread = _
@@ -16,20 +37,21 @@ class MqttBroker {
     }
   }
 
-  def subscribe(s: String, qos: Int = 1):Unit = {
+  def subscribe(id: String, topic: String, qos: Int = 1):Unit = {
     assert(running, "MqttBroker is not running")
-    brokerCore.regTask(new Subscribe(s))
+    brokerCore.regTask(new Subscribe(id, topic))
   }
 
-  def publish(topic: String, message: String): Unit = {
+  def publish(topic: String, message: MqttMessage): Unit = {
     assert(running, "MqttBroker is not running")
-    brokerCore.regTask(new Publish(topic, message))
+    brokerCore.regTask(new Publish(topic, new String(message.bytes)))
   }
 
   def stop(): Unit = {
     if (running) {
       running = false
       brokerCore.stop()
+      MqttBroker.brokerMap -= dest
     }
   }
 
@@ -39,8 +61,13 @@ class MqttBroker {
     }
   }
 
-  def regClient(c: MqttClient):Unit = {
+  def disconnect(id: String): Unit = {
     assert(running)
-    brokerCore.regTask(new Connect(c))
+    brokerCore.regTask(new Disconnect(id))
+  }
+
+  def addClient(c: MqttClient, id: String):Unit = {
+    assert(running)
+    brokerCore.regTask(new Connect(c, id))
   }
 }
