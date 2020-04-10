@@ -12,7 +12,7 @@ class BrokerCore extends Runnable {
       var t: Task = null
       this.synchronized {
         if (tasks.isEmpty) {
-          wait()
+          this.wait()
         }
         t = tasks.remove(0)
       }
@@ -36,21 +36,21 @@ class BrokerCore extends Runnable {
     this.synchronized {
       tasks.clear()
       tasks += Stop
-      notify()
+      this.notify()
     }
   }
 
   def reset(): Unit = {
     this.synchronized {
       tasks.clear()
-      notify()
+      this.notify()
     }
   }
 
   def regTask(t: Task): Unit = {
     this.synchronized {
       tasks.append(t)
-      notify()
+      this.notify()
     }
   }
 }
