@@ -398,7 +398,7 @@ object Modbat {
                     val now = System.currentTimeMillis()
                     diff = now - MBT.realMillis
                     Log.info(s"real time sleep (${diff} millis)")
-                    MBT.time.advance(diff)
+                    if (diff > 0) MBT.time.advance(diff)
                     MBT.realMillis = now
                   } else {
                     MBT.time.advance(s)
