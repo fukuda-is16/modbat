@@ -1,21 +1,21 @@
 package modbat.mbt.mqtt_utils.broker
-import scala.collection.mutable.{ArrayBuffer, Map, Set}
+import scala.collection.mutable.{Queue, Map, Set}
 import modbat.mbt.mqtt_utils.client.{MqttClient, MqttMessage}
 
 
 class BrokerCore extends Runnable {
-  val tasks = ArrayBuffer[Task]()
+  val tasks = Queue[Task]()
   val topics = Map[String, Set[String]]()
   val clientMap = Map[String, MqttClient]()
   var exit = false
   def run() = {
     while(!exit) {
       var t: Task = null
-      this.synchronized {
+      tasks.synchronized {
         if (tasks.isEmpty) {
-          this.wait()
+          tasks.wait()
         }
-        t = tasks.remove(0)
+        t = tasks.dequeue()
       }
       doTask(t)
     }
@@ -48,25 +48,25 @@ class BrokerCore extends Runnable {
 
 
   def stop(): Unit = {
-    this.synchronized {
+    tasks.synchronized {
       tasks.clear()
       tasks += Stop
-      this.notify()
+      tasks.notify()
     }
   }
 
   def reset(): Unit = {
-    this.synchronized {
+    tasks.synchronized {
       tasks.clear()
       tasks += Reset
-      this.notify()
+      tasks.notify()
     }
   }
 
   def regTask(t: Task): Unit = {
-    this.synchronized {
-      tasks.append(t)
-      this.notify()
+    tasks.synchronized {
+      tasks += t
+      tasks.notify()
     }
   }
 }
