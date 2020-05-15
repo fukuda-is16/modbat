@@ -4,7 +4,8 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
 
-class VirtualTime {
+class VirtualTime(_realClock: => Long = System.currentTimeMillis) {
+  def realClock: Long = _realClock
 
   /**
     * There's a circular dependency between the states of [[com.miguno.akka.testing.MockScheduler]] and this class,
@@ -36,9 +37,17 @@ class VirtualTime {
     */
   def advance(step: FiniteDuration): Unit = {
     require(step >= minimumAdvanceStep, s"minimum supported step is $minimumAdvanceStep")
+    var remain = step
     lock synchronized {
-      elapsedTime += step
-      scheduler.tick()
+      while(remain > 0.millis) {
+        scheduler.timeUntilNextTask match {
+          case Some(d) if d <= remain => {
+            elapsedTime += d; remain -= d
+            scheduler.tick()
+          }
+          case _ => elapsedTime += remain; remain = 0.millis
+        }
+      }
     }
   }
 

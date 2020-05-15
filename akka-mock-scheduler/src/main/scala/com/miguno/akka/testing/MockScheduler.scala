@@ -30,16 +30,29 @@ class MockScheduler(time: VirtualTime) extends Scheduler {
     */
   def tick(): Unit = {
     time.lock synchronized {
-      while (tasks.nonEmpty && tasks.head.delay <= time.elapsed) {
+      while (tasks.nonEmpty && tasks.head.start <= time.elapsed) {
         val head = tasks.dequeue()
+        if (head.blockUntil >= 0) {
+          val waitTime = head.blockUntil - time.realClock
+          if (waitTime > 0) Thread.sleep(waitTime)
+        }
         head.runnable.run()
         head.interval match {
-          case Some(interval) => tasks += new Task(head.delay + interval, head.id, head.runnable, head.interval)
+          case Some(interval) => tasks += new Task(head.start + interval, head.id, head.runnable, head.interval,
+            if (head.blockUntil >= 0) time.realClock + interval.toMillis else -1)
           case None =>
         }
       }
     }
   }
+
+  def scheduleOnceWithRealDelay(delay: FiniteDuration, runnable: Runnable)
+                           (implicit executor: ExecutionContext): Cancellable =
+    addToTasks(delay, runnable, None, true)
+
+  def scheduleWithRealDelay(initialDelay: FiniteDuration, interval: FiniteDuration, runnable: Runnable)
+                       (implicit executor: ExecutionContext): Cancellable =
+    addToTasks(initialDelay, runnable, Option(interval), true)
 
   override def scheduleOnce(delay: FiniteDuration, runnable: Runnable)
                            (implicit executor: ExecutionContext): Cancellable =
@@ -49,11 +62,12 @@ class MockScheduler(time: VirtualTime) extends Scheduler {
                        (implicit executor: ExecutionContext): Cancellable =
     addToTasks(initialDelay, runnable, Option(interval))
 
-  private def addToTasks(delay: FiniteDuration, runnable: Runnable, interval: Option[FiniteDuration]): Cancellable =
+  private def addToTasks(delay: FiniteDuration, runnable: Runnable, interval: Option[FiniteDuration], realDelay: Boolean = false): Cancellable =
     time.lock synchronized {
       id += 1
       val startTime = time.elapsed + delay
-      val task = new Task(startTime, id, runnable, interval)
+      val blockUntil: Long = if (realDelay) time.realClock + delay.toMillis else -1
+      val task = new Task(startTime, id, runnable, interval, blockUntil)
       tasks += task
       MockCancellable(this, task)
     }
@@ -69,7 +83,7 @@ class MockScheduler(time: VirtualTime) extends Scheduler {
       if(!tasks.nonEmpty) {
         None
       } else {
-        Some(tasks.head.delay - time.elapsed)
+        Some(tasks.head.start - time.elapsed)
       }
     }
   }
