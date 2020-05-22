@@ -2,7 +2,7 @@ package com.miguno.akka.testing
 
 import scala.concurrent.duration.FiniteDuration
 
-private[testing] case class Task(start: FiniteDuration, id: Long, runnable: Runnable, interval: Option[FiniteDuration], blockUntil: Long)
+private[testing] case class Task(start: FiniteDuration, id: Long, runnable: Runnable, interval: Option[FiniteDuration], blockUntil: Long = 0)
   extends Ordered[Task] {
 
   def compare(t: Task): Int =

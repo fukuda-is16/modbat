@@ -46,13 +46,11 @@ class MockScheduler(time: VirtualTime) extends Scheduler {
     }
   }
 
-  def scheduleOnceWithRealDelay(delay: FiniteDuration, runnable: Runnable)
-                           (implicit executor: ExecutionContext): Cancellable =
-    addToTasks(delay, runnable, None, true)
+  def scheduleOnceWithRealDelay(delay: FiniteDuration)(f: ⇒ Unit) =
+    addToTasks(delay, new Runnable { override def run = f }, None, true)
 
-  def scheduleWithRealDelay(initialDelay: FiniteDuration, interval: FiniteDuration, runnable: Runnable)
-                       (implicit executor: ExecutionContext): Cancellable =
-    addToTasks(initialDelay, runnable, Option(interval), true)
+  def scheduleWithRealDelay(initialDelay: FiniteDuration, interval: FiniteDuration)(f: ⇒ Unit) =
+    addToTasks(initialDelay, new Runnable { override def run = f }, Option(interval), true)
 
   override def scheduleOnce(delay: FiniteDuration, runnable: Runnable)
                            (implicit executor: ExecutionContext): Cancellable =

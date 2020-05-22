@@ -138,11 +138,11 @@ class MockSchedulerSpec extends FunSpec with Matchers with GivenWhenThen with Mo
       val counter = new AtomicInteger(0)
       time.scheduler.scheduleOnce(10.millis)(time.scheduler.scheduleOnce(20.millis)(counter.getAndIncrement))
       And("I advance the time so that A was already run (and thus B is now registered with the scheduler)")
-      time.advance(50.millis)
+      time.advance(17.millis)
       counter.get should be(0) // <<< the scheduler has only ticked once at this point, so B will not have been executed yet
 
       Then("B should be run with the configured delay (which will happen in one of the next ticks of the scheduler)")
-      time.advance(19.millis)
+      time.advance(12.millis)
       counter.get should be(0)
       time.advance(1.millis)
       counter.get should be(1)
@@ -187,5 +187,16 @@ class MockSchedulerSpec extends FunSpec with Matchers with GivenWhenThen with Mo
       counter.get should be(1)
     }
   }
+
+  it("should wait for tasks registered with realDelay to be launched in real time") {
+    val time = new VirtualTime
+    val delay = 3000.millis
+    When(s"register task at ${System.currentTimeMillis}")
+    time.scheduler.scheduleOnceWithRealDelay(delay)(And(s"task launched at ${System.currentTimeMillis}"))
+    And("advance time enough")
+    time.advance(9999)
+    And(s"finished at ${System.currentTimeMillis}")
+  }
+
 
 }
