@@ -389,6 +389,8 @@ object Modbat {
           MBT.time.scheduler.timeUntilNextTask match {
             case Some(s) => {
               if(s > 0.millis) {
+                MBT.time.advance(s)
+                /*
                 if(MBT.realInst > 0) {//real time wait
                   var diff = System.currentTimeMillis() - MBT.realMillis
                   var sleepTime = s.toMillis - diff
@@ -410,6 +412,7 @@ object Modbat {
                   Log.debug("time elapsed = "+ MBT.time.elapsed)
                   MBT.time.advance(s)
                 }
+                */
               } else MBT.time.scheduler.tick()
             }
             case None => return Array.empty

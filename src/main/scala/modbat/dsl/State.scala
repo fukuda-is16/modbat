@@ -23,7 +23,7 @@ class State (val name: String) {
   var model: MBT = _
   var timeout: Option[Transition] = None
   var real = false //if the timeout is real (=true) or virtual (=false)
-
+/*
   def addRealInst(n: Int = 1) = {
     if(MBT.realInst == 0) MBT.realMillis = System.currentTimeMillis()
     MBT.realInst += n
@@ -35,7 +35,7 @@ class State (val name: String) {
       System.exit(1)
     }
   }
-
+*/
   def getId = {
     timeoutId += 1
     timeoutId
@@ -63,7 +63,7 @@ class State (val name: String) {
   def disableTimeout = synchronized {
     if(!waitingInstances.isEmpty) {
       Log.debug("disabled timeout in " + this.toString)
-      if(real) reduceRealInst(waitingInstanceNum)
+//      if(real) reduceRealInst(waitingInstanceNum)
       waitingInstances = Map.empty
     }
   }
@@ -181,9 +181,10 @@ class State (val name: String) {
         waitingInstances = waitingInstances + (id -> n)
       }
       val task = new TimeoutTask(t, n, id)
-      if(real) addRealInst(n)
+      //if(real) addRealInst(n)
       Log.debug(s"registered task to execute ${t.toString} for $n instances in $time millis")
-      MBT.time.scheduler.scheduleOnce(time.millis)(task.run())
+      if(real) MBT.time.scheduler.scheduleOnceWithRealDelay(time.millis)(task.run())
+      else MBT.time.scheduler.scheduleOnce(time.millis)(task.run())
     }
   }
 
@@ -192,7 +193,7 @@ class State (val name: String) {
       if(!disabled(id)) {
         Log.debug(s"add timeout transition ${t.toString} to feasibleInstances")
         addFeasibleInstances(t, n)
-        if(real) reduceRealInst(n)
+//        if(real) reduceRealInst(n)
       }
       synchronized {
         waitingInstances = waitingInstances - id

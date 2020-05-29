@@ -37,15 +37,15 @@ class VirtualTime(_realClock: => Long = System.currentTimeMillis) {
     */
   def advance(step: FiniteDuration): Unit = {
     require(step >= minimumAdvanceStep, s"minimum supported step is $minimumAdvanceStep")
-    var remain = step
+    var remainder = step
     lock synchronized {
-      while(remain > 0.millis) {
+      while(remainder > 0.millis) {
         scheduler.timeUntilNextTask match {
-          case Some(d) if d <= remain => {
-            elapsedTime += d; remain -= d
+          case Some(d) if d <= remainder => {
+            elapsedTime += d; remainder -= d
             scheduler.tick()
           }
-          case _ => elapsedTime += remain; remain = 0.millis
+          case _ => elapsedTime += remainder; remainder = 0.millis
         }
       }
     }
