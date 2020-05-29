@@ -1,9 +1,13 @@
 package modbat.mbt.mqtt_utils.broker
 import scala.collection.mutable.{Queue, Map, Set}
 import modbat.mbt.mqtt_utils.client.{MqttClient, MqttMessage}
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+import akka.actor.Scheduler
 
+import modbat.mbt.MBT
 
-class BrokerCore extends Runnable {
+class BrokerCore(publishDelay: FiniteDuration=1.millis, scheduler: Scheduler=MBT.time.scheduler) extends Runnable {
   val tasks = Queue[Task]()
   val topics = Map[String, Set[String]]()
   val clientMap = Map[String, MqttClient]()
@@ -35,7 +39,12 @@ class BrokerCore extends Runnable {
       if (topics contains topic) {
         for(id <- topics(topic)) {
           val client = clientMap(id)
-          client.callback.messageArrived(topic, new MqttMessage(message.getBytes))
+          if (publishDelay > 0.millis) {
+            assert(scheduler != null)
+            scheduler.scheduleOnce(publishDelay)(client.callback.messageArrived(topic, new MqttMessage(message.getBytes)))
+          } else {
+            client.callback.messageArrived(topic, new MqttMessage(message.getBytes))
+          }
         }
       }
     }

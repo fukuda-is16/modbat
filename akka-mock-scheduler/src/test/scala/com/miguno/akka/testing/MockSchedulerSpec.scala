@@ -197,6 +197,4 @@ class MockSchedulerSpec extends FunSpec with Matchers with GivenWhenThen with Mo
     time.advance(9999)
     And(s"finished at ${System.currentTimeMillis}")
   }
-
-
 }
