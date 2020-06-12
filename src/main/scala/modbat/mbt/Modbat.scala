@@ -356,75 +356,82 @@ object Modbat {
 
     MessageHandler.mesLock.synchronized {
       //handle messages arrived from topics
-      while(!MessageHandler.arrivedTopic.isEmpty) {
+      // while(!MessageHandler.arrivedTopic.isEmpty) {
+      while(MessageHandler.arrivedMessages.nonEmpty) {
+        val (topic, message) = MessageHandler.arrivedMessages.dequeue()
         //if subscribed message, 
-        for(topic <- MessageHandler.arrivedTopic) {
-          Log.debug(s"(allSuccStates) handling message from topic $topic...")
-          if(MessageHandler.topics.contains(topic)) {
-            for(state <- MessageHandler.topics(topic)) {
-              if(state.instanceNum > 0) {
-                Log.debug(s"(allSuccStates) ${state.instanceNum} instance(s) in ${state.toString} are subscribing $topic")
-                state.messageArrived(topic, MessageHandler.messages(topic))
-                result += Tuple2(state.model, state)
-              }
+        //for(topic <- MessageHandler.arrivedTopic) {
+        //  Log.debug(s"(allSuccStates) handling message from topic $topic...")
+        if(MessageHandler.topics.contains(topic)) {
+          for(state <- MessageHandler.topics(topic)) {
+            if(state.instanceNum > 0) {
+              Log.debug(s"(allSuccStates) ${state.instanceNum} instance(s) in ${state.toString} are subscribing $topic")
+              // state.messageArrived(topic, MessageHandler.messages(topic))
+              state.messageArrived(topic, message)
+              result += Tuple2(state.model, state)
             }
-          } else {
-            Log.error(s"Subscribing topic $topic, but no transition is waiting for it.")
           }
-          MessageHandler.arrivedTopic -= topic
-          if(!result.isEmpty) {
-            executeAll = true
-            return result.toArray
-          }
+        } else {
+          Log.error(s"Subscribing topic $topic, but no transition is waiting for it.")
         }
+        //MessageHandler.arrivedTopic -= topic
+        if(!result.isEmpty) {
+          executeAll = true
+          return result.toArray
+        }
+        //}
       }
-      for(topic <- MessageHandler.arrivedTopic) {
-      }
-
-      if (givenModel == null) {
-        for (m <- MBT.launchedModels filterNot (_ isObserver) filter (_.joining == null)) {
-          addSuccStates(m, result)
-        }
-        if (result.isEmpty) {
-          MBT.time.scheduler.timeUntilNextTask match {
-            case Some(s) => {
-              if(s > 0.millis) {
-                MBT.time.advance(s)
-                /*
-                if(MBT.realInst > 0) {//real time wait
-                  var diff = System.currentTimeMillis() - MBT.realMillis
-                  var sleepTime = s.toMillis - diff
-                  if(sleepTime > 0) {
-                    Log.debug(s"allSuccessors: start real time wait (timeout in $s)")
-                    MessageHandler.mesLock.wait(sleepTime)
-                    val now = System.currentTimeMillis()
-                    diff = now - MBT.realMillis
-                    Log.info(s"real time sleep (${diff} millis)")
-                    if (diff > 0) MBT.time.advance(diff)
-                    MBT.realMillis = now
-                  } else {
-                    MBT.time.advance(s)
-                    println(s"time advance (${s} millis)")
-                    MBT.realMillis = MBT.realMillis + s.toMillis
-                  }
-                } else {
-                  Log.debug("virtual time advance "+s)
-                  Log.debug("time elapsed = "+ MBT.time.elapsed)
-                  MBT.time.advance(s)
-                }
-                */
-              } else MBT.time.scheduler.tick()
-            }
-            case None => return Array.empty
-          }
-          return allSuccStates(givenModel)
-        }
-      } else {
-        if (givenModel.joining == null) {
-          addSuccStates(givenModel, result)
-        }
-      }
+      //for(topic <- MessageHandler.arrivedTopic) {
+      //}
     }//end of mesLock.synchronize 
+
+    if (givenModel == null) {
+      for (m <- MBT.launchedModels filterNot (_ isObserver) filter (_.joining == null)) {
+        addSuccStates(m, result)
+      }
+      if (result.isEmpty) return MBT.time.scheduler.timeUntilNextTask match {
+        case Some(s) => {
+          MBT.time.advance(s)
+          allSuccStates(givenModel)
+        }
+        /*{
+          if(s > 0.millis) {
+            MBT.time.advance(s)
+            
+            if(MBT.realInst > 0) {//real time wait
+              var diff = System.currentTimeMillis() - MBT.realMillis
+              var sleepTime = s.toMillis - diff
+              if(sleepTime > 0) {
+                Log.debug(s"allSuccessors: start real time wait (timeout in $s)")
+                MessageHandler.mesLock.wait(sleepTime)
+                val now = System.currentTimeMillis()
+                diff = now - MBT.realMillis
+                Log.info(s"real time sleep (${diff} millis)")
+                if (diff > 0) MBT.time.advance(diff)
+                MBT.realMillis = now
+              } else {
+                MBT.time.advance(s)
+                println(s"time advance (${s} millis)")
+                MBT.realMillis = MBT.realMillis + s.toMillis
+              }
+            } else {
+              Log.debug("virtual time advance "+s)
+              Log.debug("time elapsed = "+ MBT.time.elapsed)
+              MBT.time.advance(s)
+            }
+            
+          } else MBT.time.scheduler.tick()
+        }*/
+        // case None => return Array.empty
+        case None => Array.empty
+      }
+      //return allSuccStates(givenModel)
+      //}
+    } else {
+      if (givenModel.joining == null) {
+        addSuccStates(givenModel, result)
+      }
+    }
     result.toArray
   }
 

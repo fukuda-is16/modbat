@@ -14,8 +14,10 @@ object MessageHandler {
   val timeToWait = -1
   var useMqtt = false
   @volatile var topics: Map[String, List[State]] = Map.empty
-  @volatile var messages: Map[String, String] = Map.empty
-  var arrivedTopic: Set[String] = Set.empty
+  //@volatile var messages: Map[String, String] = Map.empty
+  //var arrivedTopic: Set[String] = Set.empty
+  val arrivedMessages = scala.collection.mutable.Queue[(String, String)]() // (topic, content)
+
   val mesLock = new AnyRef
   var defaultQos = 1
 
@@ -55,8 +57,9 @@ object MessageHandler {
     }
     mesLock.synchronized {
       topics = Map.empty
-      messages = Map.empty
-      arrivedTopic = Set.empty
+      // messages = Map.empty
+      // arrivedTopic = Set.empty
+      arrivedMessages.clear()
     }
     useMqtt = false
     MqttBroker.reset()
@@ -79,8 +82,9 @@ object MessageHandler {
       val msg = message.toString
       Log.debug(s"(MessageHandler) message arrived from topic $topic: $msg")
       mesLock.synchronized {
-        messages = messages + (topic -> msg)
-        arrivedTopic += topic
+        // messages = messages + (topic -> msg)
+        // arrivedTopic += topic
+        arrivedMessages += Tuple2(topic, msg)
         mesLock.notify()
       }
     }

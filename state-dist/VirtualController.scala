@@ -16,7 +16,10 @@ object Const {
 
 class VirtualController extends Model {
   var user: User = _
+  var stime: Long = 0
   "init" -> "run" := {
+    stime = System.currentTimeMillis
+    println(s"start time: $stime")
     user = new User()
     launch(user)
   }
@@ -24,6 +27,8 @@ class VirtualController extends Model {
     publish("end","endMessage")
   } timeout (3 * Const.hour)
   "waitR" -> "end" := {
+    var etime = System.currentTimeMillis
+    println(s"end time: $etime\nelapsed time: ${etime-stime}")
   } realTimeout 1000
 }
 
@@ -57,6 +62,7 @@ class User extends Model {
     launch(meters)
   }
   "wait" -> "wait" := {
+      println("c-alert arrived")
       alarmCounter += 1
       assert(someMeterBroken)
   } subscribe "c-alert"
@@ -80,6 +86,7 @@ class Meter(n: Int = 1) extends Model {
   "break?" -> "broken" := {} weight 0.1
 
   "broken" -> "broken" := {
+    println(s"reported broken meter's watt (${Const.brokenWatt})")
     publish("m-report", Const.brokenWatt.toString)
   } timeout (20*Const.min) label "regular-report"
 
@@ -114,7 +121,7 @@ class Controller(meterNum: Int, sleepTime: Int) extends Model {
         if(n > 0) {
             val average = watt/n
             println(s"controller:compare $getMessage with average(= $average)")
-            if(average * 100 < arrivedWatt || arrivedWatt * 100 < average) {
+            if(!(average / 100 <= arrivedWatt && arrivedWatt <= average * 100)) {
                 publish("c-alert", "meter may be broken")
                 println("controller: published alert")
             }
