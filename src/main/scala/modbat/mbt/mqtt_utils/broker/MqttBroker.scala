@@ -1,5 +1,6 @@
 package modbat.mbt.mqtt_utils.broker
 import modbat.mbt.mqtt_utils.client.{MqttClient, MqttMessage}
+import scala.concurrent.duration._
 
 object MqttBroker {
   val brokerMap = collection.mutable.Map[String, MqttBroker]()
@@ -42,9 +43,9 @@ class MqttBroker(dest: String) {
     brokerCore.regTask(new Subscribe(id, topic))
   }
 
-  def publish(topic: String, message: MqttMessage): Unit = {
+  def publish(topic: String, message: MqttMessage, delay: FiniteDuration = 0.millis): Unit = {
     assert(running, "MqttBroker is not running")
-    brokerCore.regTask(new Publish(topic, new String(message.bytes)))
+    brokerCore.regTask(new Publish(topic, new String(message.bytes), delay))
   }
 
   def stop(): Unit = {

@@ -7,7 +7,7 @@ import akka.actor.Scheduler
 
 import modbat.mbt.MBT
 
-class BrokerCore(publishDelay: FiniteDuration=1.millis, scheduler: Scheduler=MBT.time.scheduler) extends Runnable {
+class BrokerCore(scheduler: Scheduler=MBT.time.scheduler) extends Runnable {
   val tasks = Queue[Task]()
   val topics = Map[String, Set[String]]()
   val clientMap = Map[String, MqttClient]()
@@ -35,13 +35,13 @@ class BrokerCore(publishDelay: FiniteDuration=1.millis, scheduler: Scheduler=MBT
       if (!(topics contains topic)) topics += (topic -> Set[String](id))
       else topics(topic) += id
     }
-    case Publish(topic: String, message: String) => {
+    case Publish(topic: String, message: String, delay: FiniteDuration) => {
       if (topics contains topic) {
         for(id <- topics(topic)) {
           val client = clientMap(id)
-          if (publishDelay > 0.millis) {
+          if (delay > 0.millis) {
             assert(scheduler != null)
-            scheduler.scheduleOnce(publishDelay)(client.callback.messageArrived(topic, new MqttMessage(message.getBytes)))
+            scheduler.scheduleOnce(delay)(client.callback.messageArrived(topic, new MqttMessage(message.getBytes)))
           } else {
             client.callback.messageArrived(topic, new MqttMessage(message.getBytes))
           }

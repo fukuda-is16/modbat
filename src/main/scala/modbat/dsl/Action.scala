@@ -5,6 +5,7 @@ import scala.collection.mutable.ListBuffer
 import scala.util.matching.Regex
 import modbat.log.Log
 import modbat.mbt.{MBT, MessageHandler}
+import scala.concurrent.duration._
 
 class Action(val transfunc: () => Any, val method: Method = null) {
   val expectedExc = ListBuffer[Regex]()
@@ -17,7 +18,7 @@ class Action(val transfunc: () => Any, val method: Method = null) {
   var waitTime: Option[(Int, Int)] = None
   var real = false //wait with real time
   //subscribe
-  var subTopic: Option[String] = None
+  var subTopic: Option[(String, FiniteDuration)] = None
   var guardFunc = () => true //this function is currently not used
 
   def nonDetExceptions = nonDetExc.toList
@@ -83,8 +84,8 @@ class Action(val transfunc: () => Any, val method: Method = null) {
     timeout(t1, t2)
   }
 
-  def subscribe(topic: String): Action = {
-    subTopic = Some(topic)
+  def subscribe(topic: String, delay: Long = 0.millis): Action = {
+    subTopic = Some(topic, delay)
     this
   }
 

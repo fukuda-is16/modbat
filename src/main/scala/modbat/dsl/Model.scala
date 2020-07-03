@@ -5,6 +5,7 @@ import modbat.cov.TransitionCoverage
 import modbat.log.Log
 import modbat.RequirementFailedException
 import scala.language.implicitConversions
+import scala.concurrent.duration._
 
 object Model {
   // TODO: if not run in Modbat main thread, also handle assertion failure
@@ -129,8 +130,8 @@ abstract trait Model {
     l.foldLeft(0)((n, s) => n + instanceNumInState(s))
   def hasInstanceInState(s: String): Boolean = instanceNumInState(s) > 0
   def hasInstanceInStates(l: List[String]): Boolean = instanceNumInStates(l) > 0
-  def publish(topic: String, msg: String) {
-    MessageHandler.publishRepeat(topic, msg, MBT.currentTransitionInstanceNum)
+  def publish(topic: String, msg: String, delay: FiniteDuration = 0.millis) {
+    MessageHandler.publishRepeat(topic, msg, MBT.currentTransitionInstanceNum, delay)
   }
   def getMessage = {
     val trans = MBT.currentTransition

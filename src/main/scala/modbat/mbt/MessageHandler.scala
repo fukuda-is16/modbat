@@ -5,6 +5,7 @@ import modbat.mbt.mqtt_utils.client.{MqttClient, MqttCallback, MqttConnectOption
 import modbat.mbt.mqtt_utils.broker.MqttBroker
 import modbat.dsl._
 import modbat.log.Log
+import scala.concurrent.duration._
 
 object MessageHandler {
   var clientId = MqttClient.generateClientId()
@@ -42,12 +43,12 @@ object MessageHandler {
     Log.info("mqtt client connected to "+broker)
   }
 
-  def publishRepeat(topic: String, msg: String, n: Int, qos: Int = defaultQos) {
+  def publishRepeat(topic: String, msg: String, n: Int, delay: FiniteDuration, qos: Int = defaultQos) {
     val mqttTopic = client.getTopic(topic)
     val message = new MqttMessage(msg.getBytes())
     message.setQos(qos)
     if(n > connOpts.getMaxInflight) connOpts.setMaxInflight(n)//avoid error: Too many publishes in progress (32202)
-    for(i <- 1 to n) mqttTopic.publish(message).waitForCompletion
+    for(i <- 1 to n) mqttTopic.publish(message, delay).waitForCompletion
     Log.debug(s"published message $n time(s) to topic $topic: $msg")
   }
 
