@@ -358,22 +358,22 @@ object Modbat {
       //handle messages arrived from topics
       // while(!MessageHandler.arrivedTopic.isEmpty) {
       while(MessageHandler.arrivedMessages.nonEmpty) {
-        val (topic, message) = MessageHandler.arrivedMessages.dequeue()
+        val (state, topic, message) = MessageHandler.arrivedMessages.dequeue() // (model, topic, message) に変える
         //if subscribed message, 
         //for(topic <- MessageHandler.arrivedTopic) {
         //  Log.debug(s"(allSuccStates) handling message from topic $topic...")
-        if(MessageHandler.topics.contains(topic)) {
-          for(state <- MessageHandler.topics(topic)) {
+        //if(MessageHandler.topics.contains(topic)) {
+        //  for(state <- MessageHandler.topics(topic)) { // modelとtopicからstateを出すようにする
             if(state.instanceNum > 0) {
               Log.debug(s"(allSuccStates) ${state.instanceNum} instance(s) in ${state.toString} are subscribing $topic")
               // state.messageArrived(topic, MessageHandler.messages(topic))
               state.messageArrived(topic, message)
               result += Tuple2(state.model, state)
             }
-          }
-        } else {
-          Log.error(s"Subscribing topic $topic, but no transition is waiting for it.")
-        }
+        //  }
+        //} else {
+        //  Log.error(s"Subscribing topic $topic, but no transition is waiting for it.")
+        //}
         //MessageHandler.arrivedTopic -= topic
         if(!result.isEmpty) {
           executeAll = true

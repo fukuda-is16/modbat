@@ -6,6 +6,7 @@ import modbat.mbt.mqtt_utils.broker.MqttBroker
 import modbat.dsl._
 import modbat.log.Log
 import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 object MessageHandler {
   var clientId = MqttClient.generateClientId()
@@ -17,8 +18,7 @@ object MessageHandler {
   @volatile var topics: Map[String, List[State]] = Map.empty
   //@volatile var messages: Map[String, String] = Map.empty
   //var arrivedTopic: Set[String] = Set.empty
-  val arrivedMessages = scala.collection.mutable.Queue[(String, String)]() // (topic, content)
-
+  val arrivedMessages = scala.collection.mutable.Queue[(State, String, String)]() // (state, topic, message)
   val mesLock = new AnyRef
   var defaultQos = 1
 
@@ -85,7 +85,20 @@ object MessageHandler {
       mesLock.synchronized {
         // messages = messages + (topic -> msg)
         // arrivedTopic += topic
-        arrivedMessages += Tuple2(topic, msg)
+        // トピックを待っているモデルmodelを探索する、遅延時間delayを設定、(model, topic, message)を情報として持つようなタスクを作ってmock schedularに渡す
+        if (topics contains topic) for(state <- topics(topic)) {
+          import MBT.rng
+          val dmin = state.model.model.rcvDelayMin
+          val dmax = state.model.model.rcvDelayMax
+          val interval = dmax - dmin
+          val delay = dmin + (if (interval > 0) rng.nextInt(interval + 1) else 0)
+          // delay is distributed over [dmin, dmax]
+          if (delay > 0) MBT.time.scheduler.scheduleOnce(delay.millis){
+            arrivedMessages += Tuple3(state, topic, msg)
+          } else {
+            arrivedMessages += Tuple3(state, topic, msg)
+          }
+        }
         mesLock.notify()
       }
     }

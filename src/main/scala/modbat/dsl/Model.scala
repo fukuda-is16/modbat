@@ -130,8 +130,11 @@ abstract trait Model {
     l.foldLeft(0)((n, s) => n + instanceNumInState(s))
   def hasInstanceInState(s: String): Boolean = instanceNumInState(s) > 0
   def hasInstanceInStates(l: List[String]): Boolean = instanceNumInStates(l) > 0
-  def publish(topic: String, msg: String, delay: FiniteDuration = 0.millis) {
-    MessageHandler.publishRepeat(topic, msg, MBT.currentTransitionInstanceNum, delay)
+  def publish(topic: String, msg: String) {
+    import MBT.rng
+    val interval = sendDelayMax - sendDelayMin
+    val delay = sendDelayMin + (if (interval > 0) rng.nextInt(interval + 1) else 0)
+    MessageHandler.publishRepeat(topic, msg, MBT.currentTransitionInstanceNum, delay.millis)
   }
   def getMessage = {
     val trans = MBT.currentTransition
@@ -145,4 +148,12 @@ abstract trait Model {
     }
   }
   def getVirtualTime: Long = MBT.time.elapsed.toMillis
+  // delay setting for MQTT messaging
+  // in millis
+  // delay when publishing message to broker
+  var sendDelayMin: Int = 0
+  var sendDelayMax: Int = 0
+  // delay when receiving message from broker
+  var rcvDelayMin: Int = 0
+  var rcvDelayMax: Int = 0
 }
