@@ -82,25 +82,28 @@ object MessageHandler {
       //just store messages here, handle these messages in Modbat.allSuccStates
       val msg = message.toString
       Log.debug(s"(MessageHandler) message arrived from topic $topic: $msg")
-      mesLock.synchronized {
-        // messages = messages + (topic -> msg)
-        // arrivedTopic += topic
-        // トピックを待っているモデルmodelを探索する、遅延時間delayを設定、(model, topic, message)を情報として持つようなタスクを作ってmock schedularに渡す
-        if (topics contains topic) for(state <- topics(topic)) {
-          import MBT.rng
-          val dmin = state.model.model.rcvDelayMin
-          val dmax = state.model.model.rcvDelayMax
-          val interval = dmax - dmin
-          val delay = dmin + (if (interval > 0) rng.nextInt(interval + 1) else 0)
-          // delay is distributed over [dmin, dmax]
-          if (delay > 0) MBT.time.scheduler.scheduleOnce(delay.millis){
+      // messages = messages + (topic -> msg)
+      // arrivedTopic += topic
+      // トピックを待っているモデルmodelを探索する、遅延時間delayを設定、(model, topic, message)を情報として持つようなタスクを作ってmock schedularに渡す
+      if (topics contains topic) for(state <- topics(topic)) {
+        import MBT.rng
+        val dmin = state.model.model.rcvDelayMin
+        val dmax = state.model.model.rcvDelayMax
+        val interval = dmax - dmin
+        val delay = dmin + (if (interval > 0) rng.nextInt(interval + 1) else 0)
+        // delay is distributed over [dmin, dmax]
+        if (delay > 0) MBT.time.scheduler.scheduleOnce(delay.millis){
+          mesLock.synchronized {
             arrivedMessages += Tuple3(state, topic, msg)
-          } else {
+            mesLock.notify()
+          }
+        } else {
+          mesLock.synchronized {
             arrivedMessages += Tuple3(state, topic, msg)
+            mesLock.notify()
           }
         }
-        mesLock.notify()
-      }
+      }  
     }
   }
 }

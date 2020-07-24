@@ -377,12 +377,14 @@ object Modbat {
         //MessageHandler.arrivedTopic -= topic
         if(!result.isEmpty) {
           executeAll = true
+          MessageHandler.mesLock.notify()
           return result.toArray
         }
         //}
       }
       //for(topic <- MessageHandler.arrivedTopic) {
       //}
+      MessageHandler.mesLock.notify()
     }//end of mesLock.synchronize 
 
     if (givenModel == null) {
