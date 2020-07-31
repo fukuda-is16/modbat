@@ -17,14 +17,14 @@ class DelayTest extends Model {
         println(s"elapsed time: ${etime - stime}")
         publish("end", "")
         0
-    } timeout 3000
+    } timeout 3200
 }
 
 class Observer extends Model {
-    sendDelayMin = 0
+    sendDelayMin = 500
     sendDelayMax = 0
-    rcvDelayMin = 999
-    rcvDelayMax = 999
+    rcvDelayMin = 450
+    rcvDelayMax = 500
     "waiting_obs"  -> "published" := {
         publish("req", "")
         println("published request")

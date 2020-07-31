@@ -48,7 +48,11 @@ object MessageHandler {
     val message = new MqttMessage(msg.getBytes())
     message.setQos(qos)
     if(n > connOpts.getMaxInflight) connOpts.setMaxInflight(n)//avoid error: Too many publishes in progress (32202)
-    for(i <- 1 to n) mqttTopic.publish(message, delay).waitForCompletion
+    if (delay > 0.millis) {
+      for(i <- 1 to n) MBT.time.scheduler.scheduleOnce(delay)(mqttTopic.publish(message).waitForCompletion)
+    } else {
+      for(i <- 1 to n) mqttTopic.publish(message).waitForCompletion
+    }
     Log.debug(s"published message $n time(s) to topic $topic: $msg")
   }
 

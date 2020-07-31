@@ -1,4 +1,5 @@
 package modbat.mbt.mqtt_utils.broker
+import scala.collection.mutable.{Map, Set}
 import modbat.mbt.mqtt_utils.client.{MqttClient, MqttMessage}
 import scala.concurrent.duration._
 
@@ -7,10 +8,9 @@ object MqttBroker {
   def connect(c: MqttClient, id: String, dest: String) = {
     var broker: MqttBroker = brokerMap get dest match {
       case None => {
-        val bt = new MqttBroker(dest)
-        bt.start()
-        brokerMap(dest) = bt
-        bt
+        val b = new MqttBroker(dest)
+        brokerMap(dest) = b
+        b
       }
       case Some(b) => b
     }
@@ -24,30 +24,38 @@ object MqttBroker {
 
 
 class MqttBroker(dest: String) {
-  var running: Boolean = false
-  var brokerCore = new BrokerCore()
-  var thread: Thread = _
+  val topicToClientIDs = Map[String, Set[String]]()
+  val clientIDToInstance = Map[String, MqttClient]()
 
-  def start(): Unit = {
-    if (!running) {
-      running = true
-      thread = new Thread(brokerCore)
-      thread.start()
-    } else {
-      brokerCore.reset()
-    }
+  def addClient(c: MqttClient, id: String):Unit = {
+    assert(!(clientIDToInstance contains id))
+    clientIDToInstance(id) = c
+  }
+
+  def disconnect(id: String): Unit = {
+    for((topic, ids) <- topicToClientIDs) ids -= id
+    clientIDToInstance -= id
   }
 
   def subscribe(id: String, topic: String, qos: Int = 1):Unit = {
-    assert(running, "MqttBroker is not running")
-    brokerCore.regTask(new Subscribe(id, topic))
+    if (topicToClientIDs contains topic) topicToClientIDs(topic) += id
+    else topicToClientIDs(topic) = Set[String](id)
   }
 
-  def publish(topic: String, message: MqttMessage, delay: FiniteDuration = 0.millis): Unit = {
-    assert(running, "MqttBroker is not running")
-    brokerCore.regTask(new Publish(topic, new String(message.bytes), delay))
+  def publish(topic: String, message: MqttMessage): Unit = {
+    if (topicToClientIDs contains topic) {
+      for(id <- topicToClientIDs(topic)) {
+        val c: MqttClient = clientIDToInstance(id)
+        c.callback.messageArrived(topic, message)
+      }
+    }
   }
 
+  def reset(): Unit = {
+    topicToClientIDs.clear()
+    clientIDToInstance.clear()
+  }
+/*
   def stop(): Unit = {
     if (running) {
       running = false
@@ -55,20 +63,5 @@ class MqttBroker(dest: String) {
       MqttBroker.brokerMap -= dest
     }
   }
-
-  def reset(): Unit = {
-    if (running) {
-      brokerCore.reset()
-    }
-  }
-
-  def disconnect(id: String): Unit = {
-    assert(running)
-    brokerCore.regTask(new Disconnect(id))
-  }
-
-  def addClient(c: MqttClient, id: String):Unit = {
-    assert(running)
-    brokerCore.regTask(new Connect(c, id))
-  }
+*/
 }
