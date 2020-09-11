@@ -391,10 +391,29 @@ object Modbat {
       for (m <- MBT.launchedModels filterNot (_ isObserver) filter (_.joining == null)) {
         addSuccStates(m, result)
       }
-      if (result.isEmpty) return MBT.time.scheduler.timeUntilNextTask match {
-        case Some(s) => {
-          MBT.time.advance(s)
-          allSuccStates(givenModel)
+      if (result.isEmpty) {
+        // wait for threads' block
+        import modbat.testlib.SyncedThread
+        var end = false
+        while(!end) {
+          var thd: SyncedThread = null
+          SyncedThread.uncheckedThreads.synchronized {
+            if (SyncedThread.uncheckedThreads.isEmpty) end = true
+            else thd = SyncedThread.uncheckedThreads.pop()
+          }
+          if (!end) {
+            thd.synchronized {
+              if (!thd.blocked) thd.wait()
+            }
+          }
+        }
+        // move time forward
+        return MBT.time.scheduler.timeUntilNextTask match {
+          case Some(s) => {
+            MBT.time.advance(s)
+            allSuccStates(givenModel)
+          }
+          case None => Array.empty
         }
         /*{
           if(s > 0.millis) {
@@ -425,7 +444,6 @@ object Modbat {
           } else MBT.time.scheduler.tick()
         }*/
         // case None => return Array.empty
-        case None => Array.empty
       }
       //return allSuccStates(givenModel)
       //}
