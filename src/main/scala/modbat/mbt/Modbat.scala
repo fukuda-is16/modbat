@@ -393,19 +393,42 @@ object Modbat {
       }
       if (result.isEmpty) {
         // wait for threads' block
-        import modbat.testlib.SyncedThread
+        // what is intended here is like:
+        // val callAgain = !uncheckedThreads.isEmpty()
+        // for(thd <- uncheckedThreads) {if (!thd.blocked) thd.wait()}
+
+        import modbat.testlib.MBTThread
         var end = false
+        var callAgain = false
         while(!end) {
-          var thd: SyncedThread = null
-          SyncedThread.uncheckedThreads.synchronized {
-            if (SyncedThread.uncheckedThreads.isEmpty) end = true
-            else thd = SyncedThread.uncheckedThreads.pop()
+          var thd: MBTThread = null
+          MBTThread.uncheckedThreads.synchronized {
+            if (MBTThread.uncheckedThreads.isEmpty) {
+              end = true
+            } else {
+              callAgain = true
+              thd = MBTThread.uncheckedThreads.pop()
+            }
           }
           if (!end) {
             thd.synchronized {
-              if (!thd.blocked) thd.wait()
+              // this trick may be implementation-dependent: it is assumed that jvm thread turns into terminated state only after acquiring lock of its thread obj and send notify
+
+              // thd.blocked == true || thd.getState == Thread.State.TERMINATED
+              // thd.blocked == true ... sleep he haitta
+              if (thd.getState != Thread.State.TERMINATED && !thd.blocked) {
+                // callback
+                // wait中にmessageが来たときの処理
+                // virtual time constant
+                // real time
+                thd.wait()
+              }
             }
           }
+        }
+        if (callAgain) {
+          // there may be messages coming from SUT to MBT, so exec again from the beginning
+          return allSuccStates(givenModel)
         }
         // move time forward
         return MBT.time.scheduler.timeUntilNextTask match {
@@ -415,38 +438,8 @@ object Modbat {
           }
           case None => Array.empty
         }
-        /*{
-          if(s > 0.millis) {
-            MBT.time.advance(s)
-            
-            if(MBT.realInst > 0) {//real time wait
-              var diff = System.currentTimeMillis() - MBT.realMillis
-              var sleepTime = s.toMillis - diff
-              if(sleepTime > 0) {
-                Log.debug(s"allSuccessors: start real time wait (timeout in $s)")
-                MessageHandler.mesLock.wait(sleepTime)
-                val now = System.currentTimeMillis()
-                diff = now - MBT.realMillis
-                Log.info(s"real time sleep (${diff} millis)")
-                if (diff > 0) MBT.time.advance(diff)
-                MBT.realMillis = now
-              } else {
-                MBT.time.advance(s)
-                println(s"time advance (${s} millis)")
-                MBT.realMillis = MBT.realMillis + s.toMillis
-              }
-            } else {
-              Log.debug("virtual time advance "+s)
-              Log.debug("time elapsed = "+ MBT.time.elapsed)
-              MBT.time.advance(s)
-            }
-            
-          } else MBT.time.scheduler.tick()
-        }*/
-        // case None => return Array.empty
       }
       //return allSuccStates(givenModel)
-      //}
     } else {
       if (givenModel.joining == null) {
         addSuccStates(givenModel, result)

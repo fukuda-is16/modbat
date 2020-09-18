@@ -1,8 +1,7 @@
+package SUT
 import modbat.dsl._
-// import org.eclipse.paho.client.mqttv3._
-// import org.eclipse.paho.client.mqttv3.persist._
-import modbat.mbt.mqtt_utils.client._
-import modbat.mbt.mqtt_utils.broker._
+import org.eclipse.paho.client.mqttv3._
+import org.eclipse.paho.client.mqttv3.persist._
 import java.net._
 import java.io._
 
@@ -16,10 +15,7 @@ object Const {
 
 class VirtualController extends Model {
   var user: User = _
-  var stime: Long = 0
   "init" -> "run" := {
-    stime = System.currentTimeMillis
-    println(s"start time: $stime")
     user = new User()
     launch(user)
   }
@@ -27,9 +23,7 @@ class VirtualController extends Model {
     publish("end","endMessage")
   } timeout (3 * Const.hour)
   "waitR" -> "end" := {
-    var etime = System.currentTimeMillis
-    println(s"end time: $etime\nelapsed time: ${etime-stime}")
-  } realTimeout 1000
+  } timeout 1000
 }
 
 class User extends Model {
@@ -42,7 +36,7 @@ class User extends Model {
 
  */
 
-  val meterNum = 1000
+  val meterNum = 262144
   var controller: Controller = _
   val sleepTime = 1000
   var meters: Meter = _
@@ -62,7 +56,6 @@ class User extends Model {
     launch(meters)
   }
   "wait" -> "wait" := {
-      println("c-alert arrived")
       alarmCounter += 1
       assert(someMeterBroken)
   } subscribe "c-alert"
@@ -86,7 +79,6 @@ class Meter(n: Int = 1) extends Model {
   "break?" -> "broken" := {} weight 0.1
 
   "broken" -> "broken" := {
-    println(s"reported broken meter's watt (${Const.brokenWatt})")
     publish("m-report", Const.brokenWatt.toString)
   } timeout (20*Const.min) label "regular-report"
 
@@ -97,10 +89,48 @@ class Timer extends Model {
     "wait" -> "start" := {} subscribe "timerStart"
     "start" -> "waitReal" := {
     } timeout Const.hour
-    "waitReal1" -> "waitReal2" := { publish("timerRing", "1 hour")} realTimeout 1000
-    "waitReal2" -> "wait" := {} realTimeout 1000
+    "waitReal1" -> "waitReal2" := { publish("timerRing", "1 hour")} timeout 1000
+    "waitReal2" -> "wait" := {} timeout 1000
 }
 
+// SUT
+/*
+class Controller(meterNum: Int, sleepTime: Int) {
+  var n = 0
+  var watt = 0
+  val timer = _
+  def run() {
+    subscribe("m-report");
+    t = Thread(new timer())
+    t.start()
+    while(true) {
+      val arrivedWatt = listen().toDouble
+      this.synchronized {
+        if(n > 0) {
+            val average = watt/n
+            if(average * 100 < arrivedWatt || arrivedWatt * 100 < average) {
+                publish("c-alert", "meter may be broken")
+            }
+        }
+        watt = watt + getMessage.toDouble
+        n += 1
+      }
+    }
+  }
+
+  class timer() {
+    def run() {
+      while(true) {
+        sleep(1000) // 止めて、起こす
+        println(s"${watt}, ${n}");
+        this.synchronized {
+          n = 0; watt = 0
+        }
+      }
+    }
+  }
+}
+*/
 class Controller(meterNum: Int, sleepTime: Int) extends Model {
     var timer: Timer = _
     var watt: Double = 0.0
@@ -121,7 +151,7 @@ class Controller(meterNum: Int, sleepTime: Int) extends Model {
         if(n > 0) {
             val average = watt/n
             println(s"controller:compare $getMessage with average(= $average)")
-            if(!(average / 100 <= arrivedWatt && arrivedWatt <= average * 100)) {
+            if(average * 100 < arrivedWatt || arrivedWatt * 100 < average) {
                 publish("c-alert", "meter may be broken")
                 println("controller: published alert")
             }
