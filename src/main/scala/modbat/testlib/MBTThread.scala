@@ -4,7 +4,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import modbat.mbt.MBT
 
 object MBTThread {
-  val uncheckedThreads = scala.collection.mutable.ArrayStack[MBTThread]()
+  val threadsToCheck = scala.collection.mutable.Set[MBTThread]()
 
   def sleep(millis: Long): Unit = {
     val mythd = Thread.currentThread().asInstanceOf[MBTThread]
@@ -32,5 +32,5 @@ class MBTThread(group: ThreadGroup = null, target: Runnable = new Runnable{def r
   def this(group: ThreadGroup, target: Runnable, name: String) = {this(group, target); super.setName(name)}
   def this(group: ThreadGroup, name: String) = {this(group); super.setName(name)}
   var blocked = false
-  MBTThread.uncheckedThreads.synchronized{MBTThread.uncheckedThreads.push(this)}
+  MBTThread.threadsToCheck.synchronized{MBTThread.threadsToCheck.push(this)}
 }

@@ -400,6 +400,18 @@ object Modbat {
         import modbat.testlib.MBTThread
         var end = false
         var callAgain = false
+        val toCheck = scala.collection.mutable.ArrayBuffer[MBTThread]()
+        val toRemove = scala.collection.mutable.ArrayBuffer[MBTThread]()
+        var initLen: Int = 0
+        MBTThread.threadsToCheck.synchronized {
+          initLen = MBTThread.threadsToCheck.size
+          for(thd <- MBTThread.threadsToCheck) toCheck += thd
+        }
+        for(thd <- toCheck) {
+          thd.synchronized {
+            
+          }
+        }
         while(!end) {
           var thd: MBTThread = null
           MBTThread.uncheckedThreads.synchronized {
@@ -414,15 +426,10 @@ object Modbat {
             thd.synchronized {
               // this trick may be implementation-dependent: it is assumed that jvm thread turns into terminated state only after acquiring lock of its thread obj and send notify
 
-              // thd.blocked == true || thd.getState == Thread.State.TERMINATED
-              // thd.blocked == true ... sleep he haitta
               if (thd.getState != Thread.State.TERMINATED && !thd.blocked) {
-                // callback
-                // wait中にmessageが来たときの処理
-                // virtual time constant
-                // real time
                 thd.wait()
               }
+              if (thd.getState == Thread.State.TERMINATED) toRemove += thd;
             }
           }
         }

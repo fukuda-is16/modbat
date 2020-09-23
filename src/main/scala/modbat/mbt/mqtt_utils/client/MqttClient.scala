@@ -19,6 +19,8 @@ class MqttClient(dest: String, clientId: String) {
   var broker: MqttBroker = _
   var callback: MqttCallback = _
   var isConnected = false
+  var callbackHandler: MBTThread = _
+  val messageQueue = Queue
 
   def subscribe(topic: String, qos: Int = 1):Unit = {
     broker.subscribe(clientId, topic, qos)
@@ -30,6 +32,14 @@ class MqttClient(dest: String, clientId: String) {
   }
 
   def connect(connOpts: MqttConnectOptions): Unit = {
+    callbackHandler = MBTThread(new Runnable {
+      def run() = {
+        // if message queue is not empty, pass each message as argument to callback function
+        // otherwise wait for message coming
+        val myThread = Thread.currentThread
+        
+      }
+    })
     MqttBroker.connect(this, clientId, dest)
     isConnected = true
   }
@@ -42,5 +52,11 @@ class MqttClient(dest: String, clientId: String) {
   def disconnect() = {
     broker.disconnect(clientId)
     isConnected = false
+  }
+
+  class CallbackHandler extends Runnable {
+    def run() = {
+      ;
+    }
   }
 }
