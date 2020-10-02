@@ -69,6 +69,9 @@ object Modbat {
   //var slept = false
   var executeAll = false
 
+  var currentCheckingThread = new AnyRef // initially references to dummy object
+  val cctLock = new AnyRef // this has to be acquired when touching currentCheckingThread
+
   def init {
     // reset all static variables
     failed = 0
@@ -351,6 +354,47 @@ object Modbat {
     for(s <- m.successorStates) result += Tuple2(m, s)
   }
 
+  // check whether all mbt threads are blocked
+  // if some mbt threads not blocked, wait for threads to get blocked
+  private def allThreadsBlocked(): Boolean = {
+    import modbat.testlib.MBTThread
+    val toCheck = scala.collection.mutable.ArrayBuffer[MBTThread]()
+    var allBlocked: Boolean = true;
+    // MBTThread object is also used as shared lock among all MBTThreads
+    // prepares toCheck array which is to store unblocked threads
+    MBTThread.synchronized {
+      val toRemove = scala.collection.mutable.ArrayBuffer[MBTThread]()
+      for(thd <- MBTThread.threadsToCheck) {
+        if (thd.getState == Thread.State.TERMINATED) toRemove += thd
+        else if (thd.blocked == false) {
+          allBlocked = false
+          toCheck.append(thd)
+        }
+      }
+      for(thd <- toRemove) MBTThread.threadsToCheck -= thd
+    }
+    if (allBlocked) return true
+    for(thd <- toCheck) {
+      // set current checking thread appropriately before start checking
+      cctLock.synchronized {currentCheckingThread = thd}
+      // start checking and wait if necessary
+      var whileEnd = false
+      thd.synchronized {
+        while(!whileEnd) {
+          MessageHandler.mesLock.synchronized {
+            if (MessageHandler.arrivedMessages.nonEmpty) return false
+          }
+          if (thd.getState == Thread.State.TERMINATED) {
+            MBTThread.threadsToCheck -= thd
+            whileEnd = true
+          } else if (thd.blocked) whileEnd = true
+          else thd.wait()
+        }
+      }
+    }
+    return false
+  }
+
   def allSuccStates(givenModel: MBT): Array[(MBT, State)] = {
     val result = new ArrayBuffer[(MBT, State)]()
 
@@ -377,14 +421,14 @@ object Modbat {
         //MessageHandler.arrivedTopic -= topic
         if(!result.isEmpty) {
           executeAll = true
-          MessageHandler.mesLock.notify()
+          //MessageHandler.mesLock.notify()
           return result.toArray
         }
         //}
       }
       //for(topic <- MessageHandler.arrivedTopic) {
-      //}
-      MessageHandler.mesLock.notify()
+      //}f
+      //MessageHandler.mesLock.notify()
     }//end of mesLock.synchronize 
 
     if (givenModel == null) {
@@ -392,51 +436,8 @@ object Modbat {
         addSuccStates(m, result)
       }
       if (result.isEmpty) {
-        // wait for threads' block
-        // what is intended here is like:
-        // val callAgain = !uncheckedThreads.isEmpty()
-        // for(thd <- uncheckedThreads) {if (!thd.blocked) thd.wait()}
-
-        import modbat.testlib.MBTThread
-        var end = false
-        var callAgain = false
-        val toCheck = scala.collection.mutable.ArrayBuffer[MBTThread]()
-        val toRemove = scala.collection.mutable.ArrayBuffer[MBTThread]()
-        var initLen: Int = 0
-        MBTThread.threadsToCheck.synchronized {
-          initLen = MBTThread.threadsToCheck.size
-          for(thd <- MBTThread.threadsToCheck) toCheck += thd
-        }
-        for(thd <- toCheck) {
-          thd.synchronized {
-            
-          }
-        }
-        while(!end) {
-          var thd: MBTThread = null
-          MBTThread.uncheckedThreads.synchronized {
-            if (MBTThread.uncheckedThreads.isEmpty) {
-              end = true
-            } else {
-              callAgain = true
-              thd = MBTThread.uncheckedThreads.pop()
-            }
-          }
-          if (!end) {
-            thd.synchronized {
-              // this trick may be implementation-dependent: it is assumed that jvm thread turns into terminated state only after acquiring lock of its thread obj and send notify
-
-              if (thd.getState != Thread.State.TERMINATED && !thd.blocked) {
-                thd.wait()
-              }
-              if (thd.getState == Thread.State.TERMINATED) toRemove += thd;
-            }
-          }
-        }
-        if (callAgain) {
-          // there may be messages coming from SUT to MBT, so exec again from the beginning
-          return allSuccStates(givenModel)
-        }
+        if (!allThreadsBlocked()) return allSuccStates(givenModel)
+        
         // move time forward
         return MBT.time.scheduler.timeUntilNextTask match {
           case Some(s) => {

@@ -1,5 +1,6 @@
 package modbat.mbt.mqtt_utils.client
 import modbat.mbt.mqtt_utils.broker.MqttBroker
+import modbat.testlib.MBTThread
 
 /*
 object MqttClient {
@@ -19,8 +20,8 @@ class MqttClient(dest: String, clientId: String) {
   var broker: MqttBroker = _
   var callback: MqttCallback = _
   var isConnected = false
-  var callbackHandler: MBTThread = _
-  val messageQueue = Queue
+  var callbackHandlerThread: MBTThread = _
+  val messageQueue = scala.collection.mutable.Queue[(String, MqttMessage)]()
 
   def subscribe(topic: String, qos: Int = 1):Unit = {
     broker.subscribe(clientId, topic, qos)
@@ -32,16 +33,42 @@ class MqttClient(dest: String, clientId: String) {
   }
 
   def connect(connOpts: MqttConnectOptions): Unit = {
-    callbackHandler = MBTThread(new Runnable {
+    callbackHandlerThread = new MBTThread(new Runnable {
       def run() = {
-        // if message queue is not empty, pass each message as argument to callback function
-        // otherwise wait for message coming
-        val myThread = Thread.currentThread
-        
+        var topic: String = null
+        var message: MqttMessage = null
+        var endWhile = false
+        while(!endWhile) {
+          var ok = false
+          callbackHandlerThread.synchronized {
+            if (messageQueue.isEmpty) {
+              MBTThread.synchronized {callbackHandlerThread.blocked = true}
+              callbackHandlerThread.notify()
+              callbackHandlerThread.wait()
+              if (!isConnected) endWhile = false
+            } else {
+              val t = messageQueue.dequeue()
+              topic = t._1
+              message = t._2
+              ok = true
+            }
+          }
+          if (ok) callback.messageArrived(topic, message)
+        }
       }
     })
-    MqttBroker.connect(this, clientId, dest)
     isConnected = true
+    callbackHandlerThread.start()
+    MqttBroker.connect(this, clientId, dest)
+  }
+
+  // thread safe
+  private[mqtt_utils] def enqueueMessage(topic: String, message: MqttMessage) = {
+    callbackHandlerThread.synchronized {
+      messageQueue += topic -> message
+      callbackHandlerThread.blocked = false
+      callbackHandlerThread.notify()
+    }
   }
 
   def getTopic(topic: String): MqttTopic = {
@@ -52,11 +79,5 @@ class MqttClient(dest: String, clientId: String) {
   def disconnect() = {
     broker.disconnect(clientId)
     isConnected = false
-  }
-
-  class CallbackHandler extends Runnable {
-    def run() = {
-      ;
-    }
   }
 }

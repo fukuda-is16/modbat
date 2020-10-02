@@ -13,12 +13,12 @@ class SleepTest extends Model {
         println("slept 1 sec")
       }
     }, "test thread")
-    println(MBTThread.uncheckedThreads)
+    println(MBTThread.threadsToCheck)
     println("ok", t.getName)
     t.start()
   }
   "aaa" -> "end" := {
-    println(MBTThread.uncheckedThreads)
+    println(MBTThread.threadsToCheck)
     println("end")
-  } timeout 1001
+  } timeout 999
 }

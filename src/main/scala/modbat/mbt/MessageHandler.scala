@@ -73,9 +73,9 @@ object MessageHandler {
   class Callback extends MqttCallback {
     def connectionLost(e: Throwable) {
       Log.info("connection lost")
-      mesLock.synchronized {
-        mesLock.notify()
-      }
+      // mesLock.synchronized {
+      //   mesLock.notify()
+      // }
       e.printStackTrace
     }
     def deliveryComplete(token: IMqttDeliveryToken) {
@@ -94,17 +94,29 @@ object MessageHandler {
         val dmin = state.model.model.rcvDelayMin
         val dmax = state.model.model.rcvDelayMax
         val interval = dmax - dmin
-        val delay = dmin + (if (interval > 0) rng.nextInt(interval + 1) else 0)
         // delay is distributed over [dmin, dmax]
+        val delay = dmin + (if (interval > 0) rng.nextInt(interval + 1) else 0)
+        
+        import modbat.mbt.Modbat.{cctLock, currentCheckingThread}
         if (delay > 0) MBT.time.scheduler.scheduleOnce(delay.millis){
           mesLock.synchronized {
             arrivedMessages += Tuple3(state, topic, msg)
-            mesLock.notify()
+            // notify message arrival to main thread
+            cctLock.synchronized {
+              currentCheckingThread.synchronized {
+                currentCheckingThread.notify()
+              }
+            }
           }
         } else {
           mesLock.synchronized {
             arrivedMessages += Tuple3(state, topic, msg)
-            mesLock.notify()
+          }
+          // notify message arrival to main thread
+          cctLock.synchronized {
+            currentCheckingThread.synchronized {
+              currentCheckingThread.notify()
+            }
           }
         }
       }  
