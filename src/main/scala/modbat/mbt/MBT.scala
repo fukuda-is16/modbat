@@ -241,6 +241,9 @@ object MBT {
 							     inst))
       invokedStaticMethods.clear()
       // clear buffer of static methods again for next prepare, if needed
+
+      // reset elapsed time and clear scheduled tasks if any
+      time.reset()
     }
   }
 
@@ -433,18 +436,26 @@ class MBT (val model: Model, val trans: List[Transition]) {
   }
 
   def addAndLaunch(firstLaunch: Boolean) = {
-    if (Modbat.firstInstance.contains(className)) {
-      val master =
-	     initChildInstance(className, trans.toArray)
-      regSynthTrans(true)
-      registerStateSelfTrans(model, true)
-      TransitionCoverage.reuseCoverageInfo(this, master, className)
-    } else {
-      Modbat.firstInstance.put(className, this)
-      init (false)
-      regSynthTrans(false)
-      registerStateSelfTrans(model, false)
-    }
+    //if (Modbat.firstInstance.contains(className)) {
+    //  val master =
+	  //   initChildInstance(className, trans.toArray)
+    //  regSynthTrans(true)
+    //  registerStateSelfTrans(model, true)
+    //  TransitionCoverage.reuseCoverageInfo(this, master, className)
+    //} else {
+    //  Modbat.firstInstance.put(className, this)
+    //  init (false)
+    //  regSynthTrans(false)
+    //  registerStateSelfTrans(model, false)
+    //}
+
+
+    Modbat.firstInstance.put(className, this)
+    init (false)
+    regSynthTrans(false)
+    registerStateSelfTrans(model, false)
+
+
     model.efsm = this
     instanceNum = model.instanceNum
     MBT.prepare(model)
@@ -460,6 +471,7 @@ class MBT (val model: Model, val trans: List[Transition]) {
     MBT.launchedModels += this
     MBT.launchedModelInst += model
     initialState.assignInstances(instanceNum)
+    //Log.info(s"aaa $initialState, $instanceNum")
     StateCoverage.cover(initialState)
     this
   }

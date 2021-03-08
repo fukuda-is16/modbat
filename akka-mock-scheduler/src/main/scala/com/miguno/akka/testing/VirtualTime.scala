@@ -62,4 +62,9 @@ class VirtualTime(_realClock: => Long = System.currentTimeMillis) {
 
   override def toString: String = s"${getClass.getSimpleName}(${elapsed.toMillis})"
 
+  def reset(): Unit = {
+    elapsedTime = 0.millis
+    scheduler.clear()
+  }
+
 }

@@ -101,21 +101,28 @@ object MessageHandler {
         if (delay > 0) MBT.time.scheduler.scheduleOnce(delay.millis){
           mesLock.synchronized {
             arrivedMessages += Tuple3(state, topic, msg)
-            // notify message arrival to main thread
-            cctLock.synchronized {
+          }
+          //Log.info(s"enqueueing ($topic, $msg) done")
+          // notify message arrival to main thread
+          cctLock.synchronized {
+            if (currentCheckingThread != null) {
               currentCheckingThread.synchronized {
-                currentCheckingThread.notify()
+                if (currentCheckingThread.blocked == false) currentCheckingThread.notify()
               }
             }
           }
         } else {
+          //Log.info(s"enqueues ($topic, $msg)")
           mesLock.synchronized {
             arrivedMessages += Tuple3(state, topic, msg)
           }
+          //Log.info(s"enqueueing ($topic, $msg) done")
           // notify message arrival to main thread
           cctLock.synchronized {
-            currentCheckingThread.synchronized {
-              currentCheckingThread.notify()
+            if (currentCheckingThread != null) {
+              currentCheckingThread.synchronized {
+                if (currentCheckingThread.blocked == false) currentCheckingThread.notify()
+              }
             }
           }
         }

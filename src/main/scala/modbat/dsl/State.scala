@@ -74,8 +74,9 @@ class State (val name: String) {
       Log.debug(s"(state ${this.toString}) registered transition ${t.toString}")
 
       if(!t.waitTime.isEmpty) {
-        if(!timeout.isEmpty) if(timeout.get.waitTime != t.waitTime) {
+        if(!timeout.isEmpty) if(timeout.get.waitTime.get() != t.waitTime.get()) {
           Log.error(s"There should be at most one timeout transition in state ${toString}.")
+          Log.error(s"${timeout.get.waitTime.get()}, ${t.waitTime.get()}")
           System.exit(1)
         }
         this.timeout = Some(t)
@@ -157,7 +158,8 @@ class State (val name: String) {
 
   def assignTimeout(t:Transition, n: Int) {
     t.action.waitTime match {
-      case Some((x, y)) => 
+      case Some(f) =>
+        val (x, y) = f()
         if(x == y) {
           registerToScheduler(t, x, n)
         } else {
@@ -174,13 +176,17 @@ class State (val name: String) {
     }
   }
 
-  def registerToScheduler(t:Transition, time: Int, n: Int) {
+  def registerToScheduler(t:Transition, time: Int, n: Int): Unit = {
     if(n > 0) {
       val id = getId
       synchronized {
         waitingInstances = waitingInstances + (id -> n)
       }
       val task = new TimeoutTask(t, n, id)
+      if (time <= 0) {
+        task.run()
+        return
+      }
       //if(real) addRealInst(n)
       Log.debug(s"registered task to execute ${t.toString} for $n instances in $time millis")
       if(real) MBT.time.scheduler.scheduleOnceWithRealDelay(time.millis)(task.run())
@@ -218,6 +224,7 @@ class State (val name: String) {
 
   def clear = {
     transitions = List.empty
+    timeout = None
     instanceNum = 0
     freeInstanceNum = 0
     disableTimeout

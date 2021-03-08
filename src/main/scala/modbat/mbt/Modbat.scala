@@ -69,7 +69,7 @@ object Modbat {
   //var slept = false
   var executeAll = false
 
-  var currentCheckingThread = new AnyRef // initially references to dummy object
+  var currentCheckingThread: modbat.testlib.MBTThread = null
   val cctLock = new AnyRef // this has to be acquired when touching currentCheckingThread
 
   def init {
@@ -376,7 +376,10 @@ object Modbat {
     if (allBlocked) return true
     for(thd <- toCheck) {
       // set current checking thread appropriately before start checking
-      cctLock.synchronized {currentCheckingThread = thd}
+      cctLock.synchronized {
+        currentCheckingThread = thd
+        //println(s"updated currentCheckingThread to $currentCheckingThread")
+      }
       // start checking and wait if necessary
       var whileEnd = false
       thd.synchronized {
@@ -387,8 +390,11 @@ object Modbat {
           if (thd.getState == Thread.State.TERMINATED) {
             MBTThread.threadsToCheck -= thd
             whileEnd = true
-          } else if (thd.blocked) whileEnd = true
-          else thd.wait()
+          } else if (thd.blocked) {
+            whileEnd = true
+          } else {
+            thd.wait()
+          }
         }
       }
     }
@@ -403,6 +409,7 @@ object Modbat {
       // while(!MessageHandler.arrivedTopic.isEmpty) {
       while(MessageHandler.arrivedMessages.nonEmpty) {
         val (state, topic, message) = MessageHandler.arrivedMessages.dequeue() // (model, topic, message) に変える
+        //Log.info(s"found a message '$message' of '$topic'; starts exploring")
         //if subscribed message, 
         //for(topic <- MessageHandler.arrivedTopic) {
         //  Log.debug(s"(allSuccStates) handling message from topic $topic...")
@@ -414,6 +421,7 @@ object Modbat {
               state.messageArrived(topic, message)
               result += Tuple2(state.model, state)
             }
+            else Log.info(s"no instance was waiting for topic $topic at state ${state.toString}")
         //  }
         //} else {
         //  Log.error(s"Subscribing topic $topic, but no transition is waiting for it.")
@@ -441,6 +449,7 @@ object Modbat {
         // move time forward
         return MBT.time.scheduler.timeUntilNextTask match {
           case Some(s) => {
+            Log.info(s"advances virtual time by $s from ${MBT.time.elapsed}")
             MBT.time.advance(s)
             allSuccStates(givenModel)
           }

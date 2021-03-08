@@ -31,7 +31,9 @@ class MqttClient(dest: String, clientId: String) {
     // message-arrived callback is handled by broker
     callback = cb
   }
-
+// MBT Lock
+// obj.wait() -> X.wait(obj)
+// obj.notify()
   def connect(connOpts: MqttConnectOptions): Unit = {
     callbackHandlerThread = new MBTThread(new Runnable {
       def run() = {
@@ -66,7 +68,7 @@ class MqttClient(dest: String, clientId: String) {
   private[mqtt_utils] def enqueueMessage(topic: String, message: MqttMessage) = {
     callbackHandlerThread.synchronized {
       messageQueue += topic -> message
-      callbackHandlerThread.blocked = false
+      MBTThread.synchronized {callbackHandlerThread.blocked = false}
       callbackHandlerThread.notify()
     }
   }

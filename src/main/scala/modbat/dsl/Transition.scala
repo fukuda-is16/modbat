@@ -31,7 +31,7 @@ class Transition (var origin:		State,
   val nextStatePredConv = ListBuffer[NextStatePredicate]()
   var coverage: TransitionCoverage = _
   var n: Int = 0
-  val waitTime: Option[(Int,Int)] = action.waitTime
+  val waitTime: Option[() => (Int,Int)] = action.waitTime
   val real: Boolean = action.real
   def subTopic: Option[String] = action.subTopic
 

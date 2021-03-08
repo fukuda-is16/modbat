@@ -67,6 +67,7 @@ class MockScheduler(time: VirtualTime) extends Scheduler {
       val blockUntil: Long = if (realDelay) time.realClock + delay.toMillis else -1
       val task = new Task(startTime, id, runnable, interval, blockUntil)
       tasks += task
+      //println(s"registered scheduled task which happens at $startTime")
       MockCancellable(this, task)
     }
 
@@ -91,4 +92,7 @@ class MockScheduler(time: VirtualTime) extends Scheduler {
     */
   override val maxFrequency: Double = 1.second / 1.millis
 
+  def clear(): Unit = {
+    tasks.clear()
+  }
 }

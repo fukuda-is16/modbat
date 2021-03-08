@@ -58,6 +58,8 @@ class MqttBroker(dest: String) {
       if (topicToClientIDs contains topic) {
         for(id <- topicToClientIDs(topic)) {
           val c: MqttClient = clientIDToInstance(id)
+          import modbat.log.Log
+          //Log.info(s"enqueued to client $id ($topic, $message)")
           c.enqueueMessage(topic, message)
         }
       }

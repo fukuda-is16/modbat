@@ -14,7 +14,7 @@ class Action(val transfunc: () => Any, val method: Method = null) {
   var weight = 1.0
   var immediate = false // if true, do not switch between model
   // instances for next step; immediately execute this model again
-  var waitTime: Option[(Int, Int)] = None
+  var waitTime: Option[() => (Int, Int)] = None
   var real = false //wait with real time
   //subscribe
   var subTopic: Option[String] = None
@@ -65,20 +65,20 @@ class Action(val transfunc: () => Any, val method: Method = null) {
     this
   }
 
-  def timeout(time: Int): Action = {
+  def timeout(time: => Int): Action = {
     timeout(time, time)
   }
 
-  def timeout(times: (Int, Int)): Action = {
-    waitTime = Some(times)
+  def timeout(t1: => Int, t2: => Int): Action = {
+    waitTime = Some(() => (t1, t2))
     this
   }
 
-  def realTimeout(time: Int): Action = {
+  def realTimeout(time: => Int): Action = {
     realTimeout(time, time)
   }
 
-  def realTimeout(t1: Int, t2: Int): Action = {
+  def realTimeout(t1: => Int, t2: => Int): Action = {
     real = true
     timeout(t1, t2)
   }
