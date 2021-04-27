@@ -20,7 +20,7 @@ object AccSched {
             override def run(): Unit = {
                 localLock.synchronized {
                     while (true) {
-
+                        println("while start")
                         // 仮想時間を先に進めて良いかどうか判定し，良ければ進める
                         if (enableAccelerate) {
                             //realtime_tokens から もう生きていないスレッドを削除
@@ -34,23 +34,28 @@ object AccSched {
                                     virtRealDiff += (t - getCurrentVirtualTime()) max 0
                                 }
                             }
+                            println("enableaccelerate block end")
                         }
                         
                         // 先頭のタスクの実行時刻が来ていたら，その時刻のタスクを全部実行
                         //     して，タスクから削除．
                         // 次のタスクの実行時刻までの実時間のtimeoutでwaitする．
-                        if (taskQueue.isEmpty) { localLock.wait() }
+                        if (taskQueue.isEmpty) { println("task queue is empty"); localLock.wait() }
                         else {
+                            println("task queue is not empty")
                             val Task(t0, _, task, optToken) = taskQueue.head
                             val waitTime = t0 - getCurrentVirtualTime()
-                            if (waitTime > 0) { localLock.wait(waitTime) }
+                            println(s"wait time is ${waitTime}")
+                            if (waitTime > 0) { /*println(s"${waitTime} wait start");*/ localLock.wait(waitTime); /*println(s"${waitTime} wait end")*/ }
                             else {
                                 var t1: Long = 0
                                 breakable {
                                     while (taskQueue.nonEmpty) {
-                                        val Task(t_tmp, _, task, optToken) = taskQueue.dequeue()
+                                        //println(taskQueue)
+                                        val Task(t_tmp, _, task, optToken) = taskQueue.head
                                         t1 = t_tmp
                                         if (t1 > t0) { break }
+                                        taskQueue.dequeue()
                                         optToken match {
                                             case Some(token) => { cancelDisableSkip(token) }
                                             case _ =>
@@ -66,10 +71,9 @@ object AccSched {
                                 else { localLock.wait(t1 - getCurrentVirtualTime()) }
                             }
                         }
+                        //println(s"taskQueue: ${taskQueue}")
                         val isFinished = finished()
-                        println(isFinished)
                         if (isFinished) {
-                            println("end of main loop")
                             return
                         }
                     }
@@ -85,22 +89,24 @@ object AccSched {
         }
     }
 
-    private var taskID: Int = 0
+    //private var taskID: Int = 0
     // returns task ID
     def schedule(task: => Unit, timeout: Long, real: Boolean = false): Int = {
         localLock.synchronized {
             val time: Long = getCurrentVirtualTime + timeout
             val optToken = if (real) Some(disableSkip(None)) else None
             taskQueue += new Task(time, curTaskID, new Runnable{override def run = task}, optToken)
-            taskID += 1
-            taskID
+            curTaskID += 1
+            curTaskID - 1
         }
     }
 
     def cancelSchedule(taskID: Int): Unit = {
+        //println(s"cancel task ${taskID}")
+        //println(s"before queue ${taskQueue}")
         localLock.synchronized {
             taskQueue = taskQueue.filter{(t: Task) => t.taskID != taskID}
-            val tmp = scala.collection.mutable.ArrayBuffer[Task]()
+            /*val tmp = scala.collection.mutable.ArrayBuffer[Task]()
             while(taskQueue.nonEmpty) {
                 val t: Task = taskQueue.dequeue()
                 if (t.taskID != taskID) {
@@ -108,7 +114,9 @@ object AccSched {
                 }
             }
             taskQueue ++= tmp
+            */
         }
+        //println(s"after queue ${taskQueue}")
     }
 
     def disableSkip(th: Option[ASThread]): Int = {
@@ -168,11 +176,10 @@ object AccSched {
 
     def finished(): Boolean = {
         localLock.synchronized {
-            println("check finished")
-            println(taskQueue)
-            println(realTimeTokens)
-            println(taskQueue.isEmpty && realTimeTokens.isEmpty)
-            taskQueue.isEmpty && realTimeTokens.isEmpty
+            if (taskQueue.isEmpty && realTimeTokens.isEmpty) {
+                localLock.notifyAll()
+                true
+            } else false
         }
     }
 }

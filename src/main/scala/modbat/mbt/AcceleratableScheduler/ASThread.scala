@@ -25,7 +25,7 @@ object ASThread {
     }
 
     //* sleep(time, real)
-    def sleep(time: Long, real: Boolean) = {
+    def sleep(time: Long, real: Boolean = false) = {
         asWait(new AnyRef(), time, real)
     }
 }
