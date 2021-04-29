@@ -82,7 +82,13 @@ object UnitTest {
         // test6()
 
         // asNotifyAll
-        test7()
+        // test7()
+
+        // ASThread::sleep
+        test9()
+
+        // ASThread::asWait
+        // test10()
     }
 
     // 仮想時間
@@ -179,55 +185,144 @@ object UnitTest {
         doit();
     }
 
-    // asNotifyAll
-    def test7() = {
-      val lock1 = new AnyRef;
-      val lock2 = new AnyRef;
+    // // asNotifyAll
+    // def test7() = {
+    //   val lock1 = new AnyRef;
+    //   val lock2 = new AnyRef;
 
-      ScenChk.init(List((1, 0, 0), (3, 10000, 0), (4, 10000, 0),
-                    (10, 10000, 0), (20, 20000, 0)));
+    //   ScenChk.init(List((1, 0, 0), (3, 10000, 0), (4, 10000, 0),
+    //                 (10, 10000, 0), (20, 20000, 0)));
 
-      class T1(lock: AnyRef, st: Int) extends Thread {
+    //   class T1(lock: AnyRef, st: Int) extends Thread {
+    //     override def run(): Unit = {
+    //       lock.synchronized {
+    //         ScenChk.rec(1);
+    //         lock.wait();
+    //         ScenChk.rec(st);
+    //       }
+    //     }
+    //   };
+
+    //   class T2 extends Thread {
+    //     override def run(): Unit = {
+    //       ASThread.sleep(10000);
+    //       ScenChk.rec(3);
+    //       lock1.synchronized {
+    //         AccSched.asNotifyAll(lock1);
+    //         ScenChk.rec(4);
+    //       }
+    //       ASThread.sleep(10000);
+    //       lock2.synchronized {
+    //         AccSched.asNotifyAll(lock2);
+    //         ScenChk.rec(5);
+    //       }
+    //     }
+    //   };
+    //   AccSched.init();
+    //   val t11a = new T1(lock1, 10);
+    //   val t11b = new T1(lock1, 10);
+    //   val t12a = new T1(lock2, 20);
+    //   val t12b = new T1(lock2, 20);
+    //   val t2 = new T2;
+    //   t2.start();
+    //   t11a.start();
+    //   t11b.start();
+    //   t12a.start();
+    //   t12b.start();
+
+    //   AccSched.schedule({println("wait")}, 9999000)
+    //   doit();
+    // }
+
+
+    // ASThread::sleep
+    def test9() = {
+      ScenChk.init(List((1, 10000, 0), (2, 10500, 500)));
+
+      class AST1 extends ASThread {
         override def run(): Unit = {
-          lock.synchronized {
+          println("1: start sleep 10000")
+          ASThread.sleep(10000);
+          println("1: slept 10000")
+          ScenChk.rec(1);
+          ASThread.sleep(500, real = true);
+          println("1: slept 500")
+          ScenChk.rec(2);
+        }
+      };
+
+      class T2 extends Thread {
+        override def run(): Unit = {
+          synchronized {
+            println("2: start wait")
+            AccSched.asWait(this, 20000);
+            println("end wait")
+            // ASThread の終了検知をしていない場合には，このタイムアウトの
+            // 時点で，ast1 が終了していることを知り，
+            // AccSched.finished() が true を返すようになる．
+          }
+        }
+      };
+
+      AccSched.init();
+      val ast1 = new AST1;
+      val t2 = new T2;
+      ast1.start();
+      t2.start();
+
+      doit();
+    }
+
+
+    // ASThread::asWait
+    def test10() = {
+      val lock1 = new AnyRef;
+      ScenChk.init(List((1, 1000, 0), (2, 2000, 0), (3, 12000, 0),
+                    (4, 12500, 500)));
+
+      class AST1 extends ASThread {
+        override def run(): Unit = {
+          lock1.synchronized {
+            ASThread.asWait(lock1);
             ScenChk.rec(1);
-            lock.wait();
-            ScenChk.rec(st);
+          }
+          lock1.synchronized {
+            ASThread.asWait(lock1, 10000);
+            ScenChk.rec(2);
+          }
+          lock1.synchronized {
+            ASThread.asWait(lock1, 10000);
+            ScenChk.rec(3);
+          }
+          lock1.synchronized {
+            ASThread.asWait(lock1, 500, real = true);
+            ScenChk.rec(4);
           }
         }
       };
 
       class T2 extends Thread {
         override def run(): Unit = {
-          ASThread.sleep(10000);
-          ScenChk.rec(3);
           lock1.synchronized {
-            AccSched.asNotifyAll(lock1);
-            ScenChk.rec(4);
+            AccSched.asNotifyAll(lock1, 1000);
           }
-          ASThread.sleep(10000);
-          lock2.synchronized {
-            AccSched.asNotifyAll(lock2);
-            ScenChk.rec(5);
+          lock1.synchronized {
+            AccSched.asNotifyAll(lock1, 1000);
+          }
+          lock1.synchronized {
+            AccSched.asNotifyAll(lock1, 1000000);
           }
         }
       };
-      AccSched.init();
-      val t11a = new T1(lock1, 10);
-      val t11b = new T1(lock1, 10);
-      val t12a = new T1(lock2, 20);
-      val t12b = new T1(lock2, 20);
-      val t2 = new T2;
-      t2.start();
-      t11a.start();
-      t11b.start();
-      t12a.start();
-      t12b.start();
 
-      AccSched.schedule({println("wait")}, 9999000)
       doit();
     }
 }
+
+
+
+
+
 /*
 // 実時間
 {

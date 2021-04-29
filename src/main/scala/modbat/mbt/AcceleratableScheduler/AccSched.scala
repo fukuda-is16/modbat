@@ -28,7 +28,9 @@ object AccSched {
                                 case Some(th) => th.getState != Thread.State.TERMINATED
                                 case _ => true
                             })
+                            println("check real time token")
                             if (realTimeTokens.isEmpty) {
+                                println("no real time token")
                                 if (taskQueue.nonEmpty) {
                                     val t = taskQueue.head.time
                                     virtRealDiff += (t - getCurrentVirtualTime()) max 0
@@ -48,10 +50,11 @@ object AccSched {
                             println(s"wait time is ${waitTime}")
                             if (waitTime > 0) { /*println(s"${waitTime} wait start");*/ localLock.wait(waitTime); /*println(s"${waitTime} wait end")*/ }
                             else {
+                                println("exec tasks")
                                 var t1: Long = 0
                                 breakable {
                                     while (taskQueue.nonEmpty) {
-                                        //println(taskQueue)
+                                        println(taskQueue)
                                         val Task(t_tmp, _, task, optToken) = taskQueue.head
                                         t1 = t_tmp
                                         if (t1 > t0) { break }
@@ -71,7 +74,7 @@ object AccSched {
                                 else { localLock.wait(t1 - getCurrentVirtualTime()) }
                             }
                         }
-                        //println(s"taskQueue: ${taskQueue}")
+                        println(s"taskQueue: ${taskQueue}")
                         val isFinished = finished()
                         if (isFinished) {
                             return
@@ -82,17 +85,18 @@ object AccSched {
         }
         th.start()
     }
-
+/*
     def schedulerNotify(): Unit = {
         localLock.synchronized {
             localLock.notifyAll()
         }
     }
-
+*/
     //private var taskID: Int = 0
     // returns task ID
     def schedule(task: => Unit, timeout: Long, real: Boolean = false): Int = {
         localLock.synchronized {
+            localLock.notifyAll();
             val time: Long = getCurrentVirtualTime + timeout
             val optToken = if (real) Some(disableSkip(None)) else None
             taskQueue += new Task(time, curTaskID, new Runnable{override def run = task}, optToken)
@@ -105,6 +109,7 @@ object AccSched {
         //println(s"cancel task ${taskID}")
         //println(s"before queue ${taskQueue}")
         localLock.synchronized {
+            localLock.notifyAll();
             taskQueue = taskQueue.filter{(t: Task) => t.taskID != taskID}
             /*val tmp = scala.collection.mutable.ArrayBuffer[Task]()
             while(taskQueue.nonEmpty) {
@@ -150,7 +155,7 @@ object AccSched {
 
     def asNotifyAll(lock: AnyRef): Unit = {
         localLock.synchronized {
-            for(wt <- waitingThreads(lock)) {
+            if (waitingThreads contains lock) for(wt <- waitingThreads(lock)) {
                 wt.token = disableSkip(Some(wt))
             }
             lock.synchronized {
