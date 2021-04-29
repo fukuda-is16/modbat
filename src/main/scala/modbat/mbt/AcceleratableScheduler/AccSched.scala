@@ -20,7 +20,7 @@ object AccSched {
             override def run(): Unit = {
                 localLock.synchronized {
                     while (true) {
-                        println("while start")
+                        //println("while start")
                         // 仮想時間を先に進めて良いかどうか判定し，良ければ進める
                         if (enableAccelerate) {
                             //realtime_tokens から もう生きていないスレッドを削除
@@ -28,33 +28,33 @@ object AccSched {
                                 case Some(th) => th.getState != Thread.State.TERMINATED
                                 case _ => true
                             })
-                            println("check real time token")
+                            //println("check real time token")
                             if (realTimeTokens.isEmpty) {
-                                println("no real time token")
+                                //println("no real time token")
                                 if (taskQueue.nonEmpty) {
                                     val t = taskQueue.head.time
                                     virtRealDiff += (t - getCurrentVirtualTime()) max 0
                                 }
                             }
-                            println("enableaccelerate block end")
+                            //println("enableaccelerate block end")
                         }
                         
                         // 先頭のタスクの実行時刻が来ていたら，その時刻のタスクを全部実行
                         //     して，タスクから削除．
                         // 次のタスクの実行時刻までの実時間のtimeoutでwaitする．
-                        if (taskQueue.isEmpty) { println("task queue is empty"); localLock.wait() }
+                        if (taskQueue.isEmpty) { /*println("task queue is empty");*/ localLock.wait() }
                         else {
-                            println("task queue is not empty")
+                            //println("task queue is not empty")
                             val Task(t0, _, task, optToken) = taskQueue.head
                             val waitTime = t0 - getCurrentVirtualTime()
-                            println(s"wait time is ${waitTime}")
+                            //println(s"wait time is ${waitTime}")
                             if (waitTime > 0) { /*println(s"${waitTime} wait start");*/ localLock.wait(waitTime); /*println(s"${waitTime} wait end")*/ }
                             else {
-                                println("exec tasks")
+                                //println("exec tasks")
                                 var t1: Long = 0
                                 breakable {
                                     while (taskQueue.nonEmpty) {
-                                        println(taskQueue)
+                                        //println(taskQueue)
                                         val Task(t_tmp, _, task, optToken) = taskQueue.head
                                         t1 = t_tmp
                                         if (t1 > t0) { break }
@@ -74,7 +74,7 @@ object AccSched {
                                 else { localLock.wait(t1 - getCurrentVirtualTime()) }
                             }
                         }
-                        println(s"taskQueue: ${taskQueue}")
+                        //println(s"taskQueue: ${taskQueue}")
                         val isFinished = finished()
                         if (isFinished) {
                             return

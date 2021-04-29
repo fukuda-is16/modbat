@@ -4,6 +4,7 @@ object ASThread {
     //* as_wait(lock)
     def asWait(lock: AnyRef) = {
         //AccSched.waiting_threads[lock] に，this を追加する．
+        if (!(AccSched.waitingThreads contains lock)) AccSched.waitingThreads += lock -> scala.collection.mutable.ListBuffer()
         AccSched.waitingThreads(lock) += Thread.currentThread.asInstanceOf[ASThread]
         //AccSched.cancel_disable_skip(token)
         AccSched.cancelDisableSkip(Thread.currentThread.asInstanceOf[ASThread].token)
