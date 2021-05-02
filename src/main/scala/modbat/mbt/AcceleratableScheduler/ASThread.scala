@@ -1,7 +1,6 @@
 package accsched
 
 object ASThread {
-<<<<<<< HEAD
 
     def curTh: ASThread = { Thread.currentThread.asInstanceOf[ASThread] }
 
@@ -11,33 +10,11 @@ object ASThread {
         lock.synchronized { AccSched.asWaitBase(lock, time, real, Some(curTh)); }
 	println(s"ASThread::sleep(${time}) is finished at ${AccSched.getCurrentVirtualTime()}, ${System.currentTimeMillis()}");
     }
-=======
-
-    def curTh: ASThread = { Thread.currentThread.asInstanceOf[ASThread] }
-
-    def sleep(time: Long, real: Boolean = false) = {
-	println(s"ASThread::sleep is called at ${AccSched.getCurrentVirtualTime()}, ${System.currentTimeMillis()}");
-        val lock = new AnyRef()
-        lock.synchronized { AccSched.asWaitBase(lock, time, real, Some(curTh)); }
-	println(s"ASThread::sleep is finished at ${AccSched.getCurrentVirtualTime()}, ${System.currentTimeMillis()}");
-    }
 
     def asWait(lock: AnyRef, timeout: Long, real: Boolean = false): Unit = {
         AccSched.asWaitBase(lock, timeout, real, Some(curTh))
     }
 
-    def asWait(lock: AnyRef): Unit = {
-        AccSched.asWaitBase(lock, -1, false, Some(curTh))
-    }
-
-}
->>>>>>> e09e8557072fc21df307ae0e5fd748c297d2e3cd
-
-    def asWait(lock: AnyRef, timeout: Long, real: Boolean = false): Unit = {
-        AccSched.asWaitBase(lock, timeout, real, Some(curTh))
-    }
-
-<<<<<<< HEAD
     def asWait(lock: AnyRef): Unit = {
         AccSched.asWaitBase(lock, -1, false, Some(curTh))
     }
@@ -70,23 +47,4 @@ abstract class ASThread extends Thread {
     def terminate(): Unit = {
         AccSched.discardToken(token)
     }
-=======
-
-abstract class ASThread extends Thread {
-
-    val token: Int = AccSched.getToken()
-
-    // FIXME: auxiliary constructor that takes a Runnable
-
-    def run_body(): Unit
-
-    override def run(): Unit = {
-        AccSched.askRealtime(token)
-        println("ASThread: calling run_body()")
-        run_body()
-        println("ASThread: returning from run_body()")
-        AccSched.discardToken(token)
-    }
-
->>>>>>> e09e8557072fc21df307ae0e5fd748c297d2e3cd
 }

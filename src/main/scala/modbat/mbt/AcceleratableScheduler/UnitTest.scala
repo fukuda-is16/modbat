@@ -61,6 +61,7 @@ object UnitTest {
         if (false) {
             test1() // 仮想時間
             test2() // 実時間
+            /*
             test3() // AccSched::init(false)
             test4() // scheduleするタスク
             test5() // cancelSchedule
@@ -71,6 +72,7 @@ object UnitTest {
             test10() // ASThread::asWait
             // test11 has been cancelled.
             test12() // message sending simulation
+             */
         }else {
             if (args(0) == "test1") { test1() }
             else if (args(0) == "test2") { test2() }
@@ -224,14 +226,6 @@ object UnitTest {
                 println("1: slept 500")
                 ScenChk.rec(2)
                 terminate()
-            override def run_body(): Unit = {
-                println("1: start sleep 10000")
-                ASThread.sleep(10000);
-                println("1: slept 10000")
-                ScenChk.rec(1);
-                ASThread.sleep(500, real = true);
-                println("1: slept 500")
-                ScenChk.rec(2);
             }
         };
 
@@ -250,7 +244,6 @@ object UnitTest {
         val lock1 = new AnyRef;
         class AST1 extends ASThread {
             override def run(): Unit = {
-            override def run_body(): Unit = {
                 lock1.synchronized {
                     println(s"AST1: step 1 lock1=${lock1}")
                     ASThread.asWait(lock1);
