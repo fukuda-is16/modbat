@@ -1,47 +1,42 @@
 package accsched
 
 object ASThread {
-    //* as_wait(lock)
-    def asWait(lock: AnyRef) = {
-        //AccSched.waiting_threads[lock] に，this を追加する．
-        if (!(AccSched.waitingThreads contains lock)) AccSched.waitingThreads += lock -> scala.collection.mutable.ListBuffer()
-        AccSched.waitingThreads(lock) += Thread.currentThread.asInstanceOf[ASThread]
-        //AccSched.cancel_disable_skip(token)
-        AccSched.cancelDisableSkip(Thread.currentThread.asInstanceOf[ASThread].token)
-        lock.synchronized { lock.wait() }
-    }
 
-    //* as_wait(lock, timeout, real)
-    def asWait(lock: AnyRef, timeout: Long, real: Boolean) = {
-        // taskID := AccSched.schedule(lambda{AccSched.as_notifyAll(lock);},
-        //                             AccSched.get_current_virutal_time() + timeout,
-        //                            real)
-        val taskID = AccSched.schedule(
-            AccSched.asNotifyAll(lock),
-            timeout,
-            real)
-        //as_wait(lock)
-        lock.synchronized {lock.wait()}
-        AccSched.cancelSchedule(taskID)
-    }
+    def curTh: ASThread = { Thread.currentThread.asInstanceOf[ASThread] }
 
-    //* sleep(time, real)
     def sleep(time: Long, real: Boolean = false) = {
-        asWait(new AnyRef(), time, real)
+	println(s"ASThread::sleep is called at ${AccSched.getCurrentVirtualTime()}, ${System.currentTimeMillis()}");
+        val lock = new AnyRef()
+        lock.synchronized { AccSched.asWaitBase(lock, time, real, Some(curTh)); }
+	println(s"ASThread::sleep is finished at ${AccSched.getCurrentVirtualTime()}, ${System.currentTimeMillis()}");
     }
+
+    def asWait(lock: AnyRef, timeout: Long, real: Boolean = false): Unit = {
+        AccSched.asWaitBase(lock, timeout, real, Some(curTh))
+    }
+
+    def asWait(lock: AnyRef): Unit = {
+        AccSched.asWaitBase(lock, -1, false, Some(curTh))
+    }
+
 }
 
 
-class ASThread extends Thread {
 
-    //* object fields
+abstract class ASThread extends Thread {
 
-    var token: Int = -1
+    val token: Int = AccSched.getToken()
 
-    //* start()
+    // FIXME: auxiliary constructor that takes a Runnable
 
-    override def start() = {
-        token = AccSched.disableSkip(Some(this))
-        super.start()
+    def run_body(): Unit
+
+    override def run(): Unit = {
+        AccSched.askRealtime(token)
+        println("ASThread: calling run_body()")
+        run_body()
+        println("ASThread: returning from run_body()")
+        AccSched.discardToken(token)
     }
+
 }
