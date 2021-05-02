@@ -1,5 +1,6 @@
 package accsched
 //import accsched.AccSched
+import scala.util.Random
 
 object ScenChk { // ScenarioChecker
     val epsilon: Long = 200;   
@@ -16,20 +17,16 @@ object ScenChk { // ScenarioChecker
     def rec(state_ : Int): Unit = {
         println(s"ScenChk::rec: setting state ${state_}")
         state = state_;
+        AccSched.taskNotify()
     }
 
-    // assertだとどこで失敗したのかわからないかも．backtrace() みたいのはないか?
     var pre_state: Int = 0
     def observe(fnl: Boolean = false): Unit = {
         if (state == pre_state) {
             println(s"ScenChk::observe: same state ${state}")
-            return;
         }
-        pre_state = state
-        if (fnl) {
-            println(s"SchenChk::observe Final.  idx=${idx}, expected=${scenario.size}")
-            assert(idx == scenario.size);
-        }else {
+        else {
+            pre_state = state
             assert(idx < scenario.size);
             val cur_scen = scenario(idx);
             val cur_vt: Long = AccSched.getCurrentVirtualTime();
@@ -42,15 +39,21 @@ object ScenChk { // ScenarioChecker
             assert((cur_rt - start_time - cur_scen._3).abs < epsilon);
             idx += 1;
         }
+        if (fnl) {
+            println(s"SchenChk::observe Final.  idx=${idx}, expected=${scenario.size}")
+            assert(idx == scenario.size);
+        }
     }
 }
 
 object UnitTest {
     def doit() = {
-        while (!AccSched.finished()) {
-            AccSched.taskWait();
+        while (AccSched.taskWait()) {
+            println("before observe")
             ScenChk.observe();
+            println("after observe")
         }
+        println("before final observe")
         ScenChk.observe(true);
     }
 
@@ -62,19 +65,30 @@ object UnitTest {
             test4() // scheduleするタスク
             test5() // cancelSchedule
             test6() // disableSkip / cancelDisableSkip
-            // test7 and 8 have been cancelled.
+            test7() // realtime schedule/cancelSchedule in tasks
+            // test8 has been cancelled.
             test9() // ASThread::sleep
             test10() // ASThread::asWait
             // test11 has been cancelled.
-            // test12() // notification for AccSched from ASThread
+            test12() // message sending simulation
         }else {
-            test1()
+            if (args(0) == "test1") { test1() }
+            else if (args(0) == "test2") { test2() }
+            else if (args(0) == "test3") { test3() }
+            else if (args(0) == "test4") { test4() }
+            else if (args(0) == "test5") { test5() }
+            else if (args(0) == "test6") { test6() }
+            else if (args(0) == "test7") { test7() }
+            else if (args(0) == "test9") { test9() }
+            else if (args(0) == "test10") { test10() }
+            else if (args(0) == "test12") { test12() }
         }
 
     }
 
     // 仮想時間
     def test1() = {
+        println("=== test1 ===")
         AccSched.init();
         AccSched.schedule({ ScenChk.rec(1); }, 2000);
         AccSched.schedule({ ScenChk.rec(2); }, 1000);
@@ -85,32 +99,29 @@ object UnitTest {
 
     // 実時間
     def test2() = {
-        ScenChk.init(List((2, 1000, 1000), (1, 2000, 2000)));
-
+        println("=== test2 ===")
         AccSched.init();
-        AccSched.schedule({ ScenChk.rec(1); println("rec 1 executed") }, 2000, real = true);
-        AccSched.schedule({ ScenChk.rec(2); println("rec 2 executed") }, 1000, real = true);
+        AccSched.schedule({ ScenChk.rec(1); }, 2000, real = true);
+        AccSched.schedule({ ScenChk.rec(2); }, 1000, real = true);
 
+        ScenChk.init(List((2, 1000, 1000), (1, 2000, 2000)));
         doit();
-        //AccSched.schedulerNotify()
     }
 
     // AccSched.init(false)
     def test3() = {
-        ScenChk.init(List((2, 1000, 1000), (1, 2000, 2000)));
-
+        println("=== test3 ===")
         AccSched.init(false);
         AccSched.schedule({ ScenChk.rec(1); }, 2000);
         AccSched.schedule({ ScenChk.rec(2); }, 1000);
 
+        ScenChk.init(List((2, 1000, 1000), (1, 2000, 2000)));
         doit();
     }
 
     // scheduleするタスク
     def test4() {
-        ScenChk.init(List((1, 1000, 0), (2, 2000, 0), (3, 3000, 0),
-            (4, 4000, 0), (5, 5000, 0)));
-
+        println("=== test4 ===")
         AccSched.init();
         AccSched.schedule({ ScenChk.rec(1); }, 1000);
         AccSched.schedule({
@@ -120,13 +131,14 @@ object UnitTest {
         }, 2000);
         AccSched.schedule({ ScenChk.rec(4); }, 4000);
 
+        ScenChk.init(List((1, 1000, 0), (2, 2000, 0), (3, 3000, 0),
+            (4, 4000, 0), (5, 5000, 0)));
         doit();
     }
 
     // cancelSchedule
     def test5() = {
-        ScenChk.init(List((4, 4000, 0), (5, 5000, 0)));
-
+        println("=== test5 ===")
         AccSched.init();
         val task1 = AccSched.schedule({ ScenChk.rec(1); }, 1000);
         val task2 = AccSched.schedule({ ScenChk.rec(2); }, 2000);
@@ -137,52 +149,80 @@ object UnitTest {
         val task5 = AccSched.schedule({ ScenChk.rec(5); }, 5000);
         AccSched.cancelSchedule(task1);
 
+        ScenChk.init(List((4, 4000, 0), (5, 5000, 0)));
         doit();
     }
 
-
-    // disableSkip / cancelDisableSkip
+    // askRealtime / cancelRealtime
     def test6() = {
-        ScenChk.init(List((1, 1000, 0), (2, 2000, 0), (5, 2500, 0),
-            (3, 3000, 500), (6, 3500, 1000), (4, 4000, 1000)));
-
-        AccSched.init();
-        //TimeMeasure.reset();
-        val task1 = AccSched.schedule({ ScenChk.rec(1); }, 1000);
-        val task2 = AccSched.schedule({ ScenChk.rec(2); }, 2000);
-        val task3 = AccSched.schedule({ ScenChk.rec(3); }, 3000);
-        val task4 = AccSched.schedule({ ScenChk.rec(4); }, 4000);
-        var token: Int = -1111
+        println("=== test6 ===")
+        AccSched.init()
+        val task1 = AccSched.schedule({ ScenChk.rec(1) }, 1000)
+        val task2 = AccSched.schedule({ ScenChk.rec(2) }, 2000)
+        val task3 = AccSched.schedule({ ScenChk.rec(3) }, 3000)
+        val task4 = AccSched.schedule({ ScenChk.rec(4) }, 4000)
+        var token: Int = -1
         val task5 = AccSched.schedule({
-            ScenChk.rec(5);
-            token = AccSched.disableSkip(None);
-        }, 2500);
+            ScenChk.rec(5)
+            token = AccSched.getToken()
+        }, 1500)
         val task6 = AccSched.schedule({
-            ScenChk.rec(6);
-            AccSched.cancelDisableSkip(token);
-        }, 3500);
+            ScenChk.rec(6)
+            AccSched.askRealtime(token)
+        }, 2500)
+        val task7 = AccSched.schedule({
+            ScenChk.rec(7)
+            AccSched.cancelRealtime(token)
+        }, 3500)
+        val task8 = AccSched.schedule({
+            ScenChk.rec(8)
+            AccSched.discardToken(token)
+        }, 4500)
 
+        ScenChk.init(List((1, 1000, 0), (5, 1500, 0), (2, 2000, 0),
+            (6, 2500, 0),
+            (3, 3000, 500), (7, 3500, 1000), (4, 4000, 1000), (8, 4500, 1000)))
         doit();
     }
 
-    // Test7 and Test8 have been discarded.
+
+    // realtime schedule/cancelSchedule in tasks
+    def test7() {
+        println("=== test7 ===")
+        var taskID1 = -1
+        AccSched.init()
+        AccSched.schedule({ ScenChk.rec(1); }, 1000)
+        AccSched.schedule({
+            ScenChk.rec(2)
+            AccSched.schedule({ ScenChk.rec(3); }, 500, real = true)
+        }, 2000)
+        AccSched.schedule({
+            ScenChk.rec(4)
+            taskID1 = AccSched.schedule({ ScenChk.rec(5); }, 10000, real = true)
+        }, 3000)
+        AccSched.schedule({
+            ScenChk.rec(6)
+            AccSched.cancelSchedule(taskID1)
+        }, 3500)
+        AccSched.schedule({ ScenChk.rec(7); }, 4000)
+
+        ScenChk.init(List((1, 1000, 0), (2, 2000, 0), (3, 2500, 500),
+            (4, 3000, 500), (6, 3500, 1000), (7, 4000, 1000)))
+        doit()
+    }
 
     // ASThread::sleep
     def test9() = {
-        ScenChk.init(List((1, 10000, 0), (2, 10500, 500)));
-
+        println("=== test9 ===")
         class AST1 extends ASThread {
-            override def run(): Unit = {
+            override def run_body(): Unit = {
                 println("1: start sleep 10000")
                 ASThread.sleep(10000);
                 println("1: slept 10000")
                 ScenChk.rec(1);
-                ScenChk.observe();
                 ASThread.sleep(500, real = true);
                 println("1: slept 500")
                 ScenChk.rec(2);
-                ScenChk.observe();
-                AccSched.schedule({}, 200, real = true) // for termination
             }
         };
 
@@ -190,48 +230,43 @@ object UnitTest {
         val ast1 = new AST1;
         ast1.start();
 
+        ScenChk.init(List((1, 10000, 0), (2, 10500, 500)));
         doit();
     }
 
 
     // ASThread::asWait
     def test10() = {
+        println("=== test10 ===")
         val lock1 = new AnyRef;
-        ScenChk.init(List((1, 1000, 0), (2, 2000, 0), (3, 12000, 0),
-            (4, 12500, 500)));
-
         class AST1 extends ASThread {
-            override def run(): Unit = {
+            override def run_body(): Unit = {
                 lock1.synchronized {
                     println(s"AST1: step 1 lock1=${lock1}")
                     ASThread.asWait(lock1);
                     ScenChk.rec(1);
-                    ScenChk.observe();
                 }
                 lock1.synchronized {
                     println(s"AST1: step 2 lock1=${lock1}")
                     ASThread.asWait(lock1, 10000);
                     ScenChk.rec(2);
-                    ScenChk.observe();
                 }
                 lock1.synchronized {
                     println(s"AST1: step 3 lock1=${lock1}")
                     ASThread.asWait(lock1, 10000);
                     ScenChk.rec(3);
-                    ScenChk.observe();
                 }
                 lock1.synchronized {
                     println(s"AST1: step 4 lock1=${lock1}")
                     ASThread.asWait(lock1, 500, real = true);
                     ScenChk.rec(4);
-                    ScenChk.observe();
                 }
                 AccSched.schedule({}, 500, real = true);
             }
         };
 
         class AST2 extends ASThread {
-            override def run(): Unit = {
+            override def run_body(): Unit = {
                 ASThread.sleep(1000);
                 lock1.synchronized {
                     println(s"AST2: step A lock1=${lock1}")
@@ -254,68 +289,95 @@ object UnitTest {
         AccSched.init();
         val t1 = new AST1;
         val t2 = new AST2;
+        println(s"t1.token=${t1.token}, t2.token=${t2.token}")
         t2.start();
         t1.start();
 
+        ScenChk.init(List((1, 1000, 0), (2, 2000, 0), (3, 12000, 0),
+            (4, 12500, 500)));
         doit();
     }
 
-
-    // notification for AccSched from ASThread
+    // message sending simulation
     def test12() = {
+        println("=== test12 ===")
         
-        class AST1 extends ASThread {
-            override def run(): Unit = {
-                ASThread.sleep(500);
+        var newArrival = 0
 
-                Thread.sleep(300); // work simulation
-                ScenChk.rec(100);
-                AccSched.synchronized {
-                    AccSched.notifyAll(); // ordinary version
-                }
+        trait Callback {
+            def messageArrived(t: Int)
+        }
 
-                Thread.sleep(300); // work simulation
-                ScenChk.rec(101);
-                AccSched.synchronized {
-                    AccSched.notifyAll(); // ordinary version
+        class Listener(cb: Callback) extends ASThread {
+            val callback: Callback = cb
+            val msgQue = scala.collection.mutable.Queue[Int]()
+            override def run_body(): Unit = {
+                msgQue.synchronized {
+                    if (msgQue.isEmpty) {
+                        msgQue.wait()
+                    }else {
+                        val t = msgQue.dequeue()
+                        callback.messageArrived(t)
+                    }
                 }
+            }
+            def enqueMsg(t: Int): Unit = {
+                msgQue.synchronized {
+                    msgQue += t
+                    msgQue.notify()
+                }
+            }
 
-                ASThread.sleep(8900);
-                ScenChk.rec(102);
-                AccSched.synchronized {
-                    AccSched.notifyAll(); // ordinary version
-                }
-                AccSched.schedule({}, 200, real = true) // for termination
+        }
+
+        object MyCallback extends Callback {
+            def messageArrived(t: Int) {
+                newArrival = t
+                AccSched.taskNotify()
+            }
+        }
+        val listener = new Listener(MyCallback)
+
+        object SUT1 extends ASThread {
+            override def run_body(): Unit = {
+                ASThread.sleep(1000)
+                listener.enqueMsg(1)
+                ASThread.sleep(200, real=true)
+                listener.enqueMsg(2)
+                ASThread.sleep(200)
+                listener.enqueMsg(4)
+                ASThread.sleep(200, real=true)
+                listener.enqueMsg(6)
             }
         };
 
-        AccSched.init();
-        val token1 = AccSched.disableSkip(None)
-        AccSched.schedule({ ScenChk.rec(1); }, 400);
-        AccSched.schedule({ ScenChk.rec(2); }, 600);
-        AccSched.schedule({ ScenChk.rec(3); }, 900);
-        AccSched.schedule({ ScenChk.rec(4); }, 1200);
-        AccSched.schedule({ ScenChk.rec(5); }, 5000);
-        AccSched.schedule({ ScenChk.rec(1000); }, 1000000);
-
-        val ast1 = new AST1;
-        ast1.start();
-        AccSched.cancelDisableSkip(token1)
-
-        ScenChk.init(List((1, 400, 0), (2, 600, 100),
-            (100, 800, 300), (3, 900, 400),
-            (101, 1100, 600), (4, 1200, 600), (5, 5000, 600),
-            (102, 10000, 600), (1000, 1000000, 600)));
-        AccSched.synchronized {
-            while (!AccSched.finished()) {
-                println(s"doit is waiting")
-                AccSched.notifyAll();
-                AccSched.wait();
-                println(s"doit wakes up")
-                ScenChk.observe();
+        object SUT2 extends ASThread {
+            override def run_body(): Unit = {
+                ASThread.sleep(1300)
+                listener.enqueMsg(3)
+                ASThread.sleep(200)
+                listener.enqueMsg(5)
+                ASThread.sleep(500)
+                listener.enqueMsg(7)
             }
-            ScenChk.observe(true);
+        };
+
+
+        AccSched.init();
+        listener.start()
+        SUT1.start()
+        SUT2.start()
+
+        var lastSeen: Int = 0
+        while (AccSched.taskWait()) {
+            println(s"newArrival = ${newArrival}, lastSeen = ${lastSeen}")
+            assert(newArrival == lastSeen || newArrival == lastSeen + 1)
+            lastSeen = newArrival
+            if (newArrival == 7) {
+                AccSched.shutdown()
+            }
         }
+
     }
 }
 
