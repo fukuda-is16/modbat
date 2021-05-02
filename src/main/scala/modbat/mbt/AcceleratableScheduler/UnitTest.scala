@@ -8,10 +8,14 @@ object ScenChk { // ScenarioChecker
     var state: Int = 0;
     var scenario: List[(Int, Long, Long)] = _;   // (state, 仮想時刻, 実時刻)
     var idx = 0;
+    var pre_state: Int = 0
 
     def init(scenario_ : List[(Int, Long, Long)]) = { // コンストラクタ
-        scenario = scenario_;
         start_time = System.currentTimeMillis();
+        state = 0
+        scenario = scenario_;
+        idx = 0
+        pre_state = 0
     }
 
     def rec(state_ : Int): Unit = {
@@ -20,7 +24,6 @@ object ScenChk { // ScenarioChecker
         AccSched.taskNotify()
     }
 
-    var pre_state: Int = 0
     def observe(fnl: Boolean = false): Unit = {
         if (state == pre_state) {
             println(s"ScenChk::observe: same state ${state}")
@@ -58,10 +61,9 @@ object UnitTest {
     }
 
     def main(args: Array[String]) = {
-        if (false) {
+        if (args.size == 0) {
             test1() // 仮想時間
             test2() // 実時間
-            /*
             test3() // AccSched::init(false)
             test4() // scheduleするタスク
             test5() // cancelSchedule
@@ -72,7 +74,7 @@ object UnitTest {
             test10() // ASThread::asWait
             // test11 has been cancelled.
             test12() // message sending simulation
-             */
+            println("ok")
         }else {
             if (args(0) == "test1") { test1() }
             else if (args(0) == "test2") { test2() }
