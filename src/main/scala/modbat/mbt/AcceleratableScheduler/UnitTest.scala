@@ -166,7 +166,7 @@ object UnitTest {
         var token: Int = -1
         val task5 = AccSched.schedule({
             ScenChk.rec(5)
-            token = AccSched.getToken()
+            token = AccSched.getToken(false)
         }, 1500)
         val task6 = AccSched.schedule({
             ScenChk.rec(6)
