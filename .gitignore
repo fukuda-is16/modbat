@@ -7,6 +7,7 @@ git-hash
 *.tar.gz
 .*.swp
 *.class
+tmp_test
 
 # Gradle
 .gradle/

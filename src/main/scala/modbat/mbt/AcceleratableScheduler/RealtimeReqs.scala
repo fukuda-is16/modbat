@@ -7,7 +7,7 @@ class RealtimeReqs {
     var tokenSeq: Int = 0
     val status = scala.collection.mutable.Map[Int, Boolean]()
 
-    def newToken(initVal: Boolean = false): Int = {
+    def newToken(initVal: Boolean = true): Int = {
         tokenSeq += 1
         status += tokenSeq -> initVal
         return tokenSeq

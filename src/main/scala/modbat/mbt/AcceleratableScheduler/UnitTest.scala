@@ -215,14 +215,15 @@ object UnitTest {
     def test9() = {
         println("=== test9 ===")
         class AST1 extends ASThread {
-            override def run_body(): Unit = {
+            override def run(): Unit = {
                 println("1: start sleep 10000")
                 ASThread.sleep(10000);
                 println("1: slept 10000")
-                ScenChk.rec(1);
+                ScenChk.rec(1)
                 ASThread.sleep(500, real = true);
                 println("1: slept 500")
-                ScenChk.rec(2);
+                ScenChk.rec(2)
+                terminate()
             }
         };
 
@@ -240,7 +241,7 @@ object UnitTest {
         println("=== test10 ===")
         val lock1 = new AnyRef;
         class AST1 extends ASThread {
-            override def run_body(): Unit = {
+            override def run(): Unit = {
                 lock1.synchronized {
                     println(s"AST1: step 1 lock1=${lock1}")
                     ASThread.asWait(lock1);
@@ -262,11 +263,12 @@ object UnitTest {
                     ScenChk.rec(4);
                 }
                 AccSched.schedule({}, 500, real = true);
+                terminate()
             }
         };
 
         class AST2 extends ASThread {
-            override def run_body(): Unit = {
+            override def run(): Unit = {
                 ASThread.sleep(1000);
                 lock1.synchronized {
                     println(s"AST2: step A lock1=${lock1}")
@@ -283,6 +285,7 @@ object UnitTest {
                     AccSched.asNotifyAll(lock1);
                 }
                 AccSched.schedule({}, 500, real = true);
+                terminate()
             }
         };
 
@@ -302,7 +305,9 @@ object UnitTest {
     def test12() = {
         println("=== test12 ===")
         
-        var newArrival = 0
+        val mainQue = scala.collection.mutable.Queue[Int]()
+
+        AccSched.init();
 
         trait Callback {
             def messageArrived(t: Int)
@@ -311,35 +316,47 @@ object UnitTest {
         class Listener(cb: Callback) extends ASThread {
             val callback: Callback = cb
             val msgQue = scala.collection.mutable.Queue[Int]()
-            override def run_body(): Unit = {
+            @volatile var forceTerminate = false
+            override def run(): Unit = {
                 msgQue.synchronized {
-                    if (msgQue.isEmpty) {
-                        msgQue.wait()
-                    }else {
-                        val t = msgQue.dequeue()
-                        callback.messageArrived(t)
+                    while (true) {
+                        if (msgQue.isEmpty) {
+                            if (forceTerminate) { return }
+                            ASThread.asWait(msgQue)
+                        }else {
+                            val t = msgQue.dequeue()
+                            callback.messageArrived(t)
+                        }
                     }
                 }
             }
             def enqueMsg(t: Int): Unit = {
+                println(s"enqueMsg: enter for ${t}")
                 msgQue.synchronized {
+                    println(s"enqueMsg: got lock for ${t}")
                     msgQue += t
-                    msgQue.notify()
+                    AccSched.asNotifyAll(msgQue)
                 }
+            }
+            def shutdown(): Unit = {
+                forceTerminate = true
+                msgQue.synchronized { AccSched.asNotifyAll(msgQue) }
+                terminate()
             }
 
         }
 
         object MyCallback extends Callback {
             def messageArrived(t: Int) {
-                newArrival = t
+                println(s"messageArrived: t = ${t}")
+                mainQue.synchronized { mainQue += t }
                 AccSched.taskNotify()
             }
         }
         val listener = new Listener(MyCallback)
 
         object SUT1 extends ASThread {
-            override def run_body(): Unit = {
+            override def run(): Unit = {
                 ASThread.sleep(1000)
                 listener.enqueMsg(1)
                 ASThread.sleep(200, real=true)
@@ -348,35 +365,44 @@ object UnitTest {
                 listener.enqueMsg(4)
                 ASThread.sleep(200, real=true)
                 listener.enqueMsg(6)
+                terminate()
             }
         };
 
         object SUT2 extends ASThread {
-            override def run_body(): Unit = {
+            override def run(): Unit = {
                 ASThread.sleep(1300)
                 listener.enqueMsg(3)
                 ASThread.sleep(200)
                 listener.enqueMsg(5)
                 ASThread.sleep(500)
                 listener.enqueMsg(7)
+                terminate()
             }
         };
 
-
-        AccSched.init();
         listener.start()
         SUT1.start()
         SUT2.start()
 
-        var lastSeen: Int = 0
+        ScenChk.init(List(
+            (1, 1000, 0), (2, 1200, 200), (3, 1300, 200),
+            (4, 1400, 200), (5, 1500, 300), (6, 1600, 400),
+            (7, 2000, 400)
+        ))
         while (AccSched.taskWait()) {
-            println(s"newArrival = ${newArrival}, lastSeen = ${lastSeen}")
-            assert(newArrival == lastSeen || newArrival == lastSeen + 1)
-            lastSeen = newArrival
-            if (newArrival == 7) {
-                AccSched.shutdown()
+            mainQue.synchronized {
+                while (! mainQue.isEmpty) {
+                    val t = mainQue.dequeue()
+                    ScenChk.rec(t)
+                    ScenChk.observe()
+                    if (t == 7) {
+                        listener.shutdown()
+                    }
+                }
             }
         }
+        ScenChk.observe(true)
 
     }
 }
