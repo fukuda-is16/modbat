@@ -224,6 +224,14 @@ object UnitTest {
                 println("1: slept 500")
                 ScenChk.rec(2)
                 terminate()
+            override def run_body(): Unit = {
+                println("1: start sleep 10000")
+                ASThread.sleep(10000);
+                println("1: slept 10000")
+                ScenChk.rec(1);
+                ASThread.sleep(500, real = true);
+                println("1: slept 500")
+                ScenChk.rec(2);
             }
         };
 
@@ -242,6 +250,7 @@ object UnitTest {
         val lock1 = new AnyRef;
         class AST1 extends ASThread {
             override def run(): Unit = {
+            override def run_body(): Unit = {
                 lock1.synchronized {
                     println(s"AST1: step 1 lock1=${lock1}")
                     ASThread.asWait(lock1);

@@ -5,7 +5,6 @@ import util.control.Breaks.{breakable, break}
 object AccSched  {
 
     val localLock = new AnyRef
-    // val waitingThreads = scala.collection.mutable.Map[AnyRef, scala.collection.mutable.ListBuffer[ASThread]]()
     var enableAccelerate: Boolean = true
     var selfEnd: Boolean = true
     var virtRealDiff: Long = 0
