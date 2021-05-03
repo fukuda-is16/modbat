@@ -8,6 +8,8 @@ import modbat.log.Log
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
+import accsched._
+
 object MessageHandler {
   var clientId = MqttClient.generateClientId()
   var broker = "tcp://localhost:1883"
@@ -49,7 +51,9 @@ object MessageHandler {
     message.setQos(qos)
     if(n > connOpts.getMaxInflight) connOpts.setMaxInflight(n)//avoid error: Too many publishes in progress (32202)
     if (delay > 0.millis) {
-      for(i <- 1 to n) MBT.time.scheduler.scheduleOnce(delay)(mqttTopic.publish(message).waitForCompletion)
+      AccSched.schedule({
+        for(i <- 1 to n) mqttTopic.publish(message).waitForCompletion
+      }, delay.toMillis)
     } else {
       for(i <- 1 to n) mqttTopic.publish(message).waitForCompletion
     }
@@ -96,37 +100,46 @@ object MessageHandler {
         val interval = dmax - dmin
         // delay is distributed over [dmin, dmax]
         val delay = dmin + (if (interval > 0) rng.nextInt(interval + 1) else 0)
-        
-        import modbat.mbt.Modbat.{cctLock, currentCheckingThread}
-        if (delay > 0) MBT.time.scheduler.scheduleOnce(delay.millis){
-          mesLock.synchronized {
-            arrivedMessages += Tuple3(state, topic, msg)
-          }
-          //Log.info(s"enqueueing ($topic, $msg) done")
-          // notify message arrival to main thread
-          cctLock.synchronized {
-            if (currentCheckingThread != null) {
-              currentCheckingThread.synchronized {
-                if (currentCheckingThread.blocked == false) currentCheckingThread.notify()
-              }
-            }
-          }
+
+        if (delay > 0) {
+          AccSched.schedule({
+            mesLock.synchronized {arrivedMessages += Tuple3(state, topic, msg)}
+          }, delay.toLong)
         } else {
-          //Log.info(s"enqueues ($topic, $msg)")
-          mesLock.synchronized {
-            arrivedMessages += Tuple3(state, topic, msg)
-          }
-          //Log.info(s"enqueueing ($topic, $msg) done")
-          // notify message arrival to main thread
-          cctLock.synchronized {
-            if (currentCheckingThread != null) {
-              currentCheckingThread.synchronized {
-                if (currentCheckingThread.blocked == false) currentCheckingThread.notify()
-              }
-            }
-          }
+          mesLock.synchronized {arrivedMessages += Tuple3(state, topic, msg)}
         }
-      }  
+
+        // import modbat.mbt.Modbat.{cctLock, currentCheckingThread}
+        // if (delay > 0) MBT.time.scheduler.scheduleOnce(delay.millis){
+        //   mesLock.synchronized {
+        //     arrivedMessages += Tuple3(state, topic, msg)
+        //   }
+        //   //Log.info(s"enqueueing ($topic, $msg) done")
+        //   // notify message arrival to main thread
+        //   cctLock.synchronized {
+        //     if (currentCheckingThread != null) {
+        //       currentCheckingThread.synchronized {
+        //         if (currentCheckingThread.blocked == false) currentCheckingThread.notify()
+        //       }
+        //     }
+        //   }
+        // } else {
+        //   //Log.info(s"enqueues ($topic, $msg)")
+        //   mesLock.synchronized {
+        //     arrivedMessages += Tuple3(state, topic, msg)
+        //   }
+        //   //Log.info(s"enqueueing ($topic, $msg) done")
+        //   // notify message arrival to main thread
+        //   cctLock.synchronized {
+        //     if (currentCheckingThread != null) {
+        //       currentCheckingThread.synchronized {
+        //         if (currentCheckingThread.blocked == false) currentCheckingThread.notify()
+        //       }
+        //     }
+        //   }
+        // }
+      }
+      AccSched.taskNotify()
     }
   }
 }

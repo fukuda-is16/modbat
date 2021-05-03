@@ -6,6 +6,8 @@ import modbat.mbt.{MBT, MessageHandler}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
+import accsched._
+
 class State (val name: String) {
   override def toString = name
   var coverage: StateCoverage = _
@@ -13,7 +15,10 @@ class State (val name: String) {
   var instanceNum = 0
   var feasibleInstances: Map[Transition, Int] = Map.empty
   def feasible = instanceNum > 0 && !feasibleInstances.isEmpty
-  @volatile var waitingInstances: Map[Int, Int] = Map.empty//key: id, value: (instanceNum,disabled)
+
+  //@volatile var waitingInstances: Map[Int, Int] = Map.empty//key: id, value: (instanceNum,disabled)
+  val timeoutTaskIDs = scala.collection.mutable.Set[Int]()
+
   var freeInstanceNum = 0 //instances with no feasible transition
   var transitions: List[Transition] = List.empty
   var subTopics: Map[String, Transition] = Map.empty //topics subscribing in this state
@@ -54,19 +59,16 @@ class State (val name: String) {
   def cancelFeasibleInstances = {
     feasibleInstances = Map.empty
   }
-  def waitingInstanceNum: Int = {
-    var num = 0
-    waitingInstances.foreach(i => num = num + i._2)
-    num
-  }
-  def disabled(id: Int): Boolean = !waitingInstances.contains(id)
-  def disableTimeout = synchronized {
-    if(!waitingInstances.isEmpty) {
-      Log.debug("disabled timeout in " + this.toString)
-//      if(real) reduceRealInst(waitingInstanceNum)
-      waitingInstances = Map.empty
+
+  def disableTimeout(): Unit = {
+    timeoutTaskIDs.synchronized {
+      for(taskid <- timeoutTaskIDs) {
+        AccSched.cancelSchedule(taskid)
+      }
+      timeoutTaskIDs.clear()
     }
   }
+
   private def availableTransitions: List[(Transition)] = transitions.filter({t => t.subTopic.isEmpty && t.waitTime.isEmpty})
   def addTransition(t: Transition) = {
     if(transitions.filter(_ == t).isEmpty) {
@@ -176,33 +178,32 @@ class State (val name: String) {
     }
   }
 
-  def registerToScheduler(t:Transition, time: Int, n: Int): Unit = {
+  def registerToScheduler(t:Transition, time: Long, n: Int): Unit = {
     if(n > 0) {
-      val id = getId
-      synchronized {
-        waitingInstances = waitingInstances + (id -> n)
-      }
-      val task = new TimeoutTask(t, n, id)
       if (time <= 0) {
-        task.run()
+        addFeasibleInstances(t, n)
         return
       }
-      //if(real) addRealInst(n)
+      val task = new TimeoutTask(t, n)
       Log.debug(s"registered task to execute ${t.toString} for $n instances in $time millis")
-      if(real) MBT.time.scheduler.scheduleOnceWithRealDelay(time.millis)(task.run())
-      else MBT.time.scheduler.scheduleOnce(time.millis)(task.run())
+      val taskid = AccSched.schedule(task.run(), time, real)
+      task.taskid = taskid
+      timeoutTaskIDs.synchronized {
+        timeoutTaskIDs += taskid
+      }
     }
   }
+// waitingInstances -> timeoutTaskIDs (Set[taskID]) 
+// メッセージが来たら全部消す
+// 来ずにtask実行で消す
+  class TimeoutTask(t: Transition, n: Int) extends Runnable {
+    var taskid: Int = -1
+    def run() {
+      Log.debug(s"add timeout transition ${t.toString} to feasibleInstances")
+      addFeasibleInstances(t, n)
 
-  class TimeoutTask(t: Transition, n: Int, id: Int) extends Thread {
-    override def run() {
-      if(!disabled(id)) {
-        Log.debug(s"add timeout transition ${t.toString} to feasibleInstances")
-        addFeasibleInstances(t, n)
-//        if(real) reduceRealInst(n)
-      }
-      synchronized {
-        waitingInstances = waitingInstances - id
+      timeoutTaskIDs.synchronized {
+        timeoutTaskIDs -= taskid
       }
     }
   }
@@ -215,9 +216,9 @@ class State (val name: String) {
     messageBuffer = msg
     var trans = subTopics(topic)
     Log.debug(s"(state ${this.toString} messageArrived) message arrived from topic $topic: $msg")
-    Log.debug(s"(state $toString) waitingInstanceNum = $waitingInstanceNum, freeInstanceNum = $freeInstanceNum")
+    //Log.debug(s"(state $toString) waitingInstanceNum = $waitingInstanceNum, freeInstanceNum = $freeInstanceNum")
     cancelFeasibleInstances
-    disableTimeout
+    disableTimeout()
     addFeasibleInstances(trans, instanceNum)
     freeInstanceNum = 0
   }

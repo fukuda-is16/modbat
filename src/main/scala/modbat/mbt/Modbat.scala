@@ -42,6 +42,8 @@ import modbat.util.FieldUtil
 import org.eclipse.paho.client.mqttv3.{MqttClient, MqttMessage}
 import com.miguno.akka.testing.VirtualTime
 
+import accsched.AccSched
+
 /** Contains code to explore model */
 object Modbat {
   object AppState extends Enumeration {
@@ -405,38 +407,19 @@ object Modbat {
     val result = new ArrayBuffer[(MBT, State)]()
 
     MessageHandler.mesLock.synchronized {
-      //handle messages arrived from topics
-      // while(!MessageHandler.arrivedTopic.isEmpty) {
       while(MessageHandler.arrivedMessages.nonEmpty) {
         val (state, topic, message) = MessageHandler.arrivedMessages.dequeue() // (model, topic, message) に変える
-        //Log.info(s"found a message '$message' of '$topic'; starts exploring")
-        //if subscribed message, 
-        //for(topic <- MessageHandler.arrivedTopic) {
-        //  Log.debug(s"(allSuccStates) handling message from topic $topic...")
-        //if(MessageHandler.topics.contains(topic)) {
-        //  for(state <- MessageHandler.topics(topic)) { // modelとtopicからstateを出すようにする
             if(state.instanceNum > 0) {
               Log.debug(s"(allSuccStates) ${state.instanceNum} instance(s) in ${state.toString} are subscribing $topic")
-              // state.messageArrived(topic, MessageHandler.messages(topic))
               state.messageArrived(topic, message)
               result += Tuple2(state.model, state)
             }
             else Log.info(s"no instance was waiting for topic $topic at state ${state.toString}")
-        //  }
-        //} else {
-        //  Log.error(s"Subscribing topic $topic, but no transition is waiting for it.")
-        //}
-        //MessageHandler.arrivedTopic -= topic
         if(!result.isEmpty) {
           executeAll = true
-          //MessageHandler.mesLock.notify()
           return result.toArray
         }
-        //}
       }
-      //for(topic <- MessageHandler.arrivedTopic) {
-      //}f
-      //MessageHandler.mesLock.notify()
     }//end of mesLock.synchronize 
 
     if (givenModel == null) {
@@ -464,6 +447,7 @@ object Modbat {
     }
     result.toArray
   }
+
 
   def updateExecHistory(model: MBT,
 			localStoredRNGState: CloneableRandom,
@@ -508,7 +492,7 @@ object Modbat {
     }
   }
   def exploreSuccessors: (TransitionResult, RecordedTransition) = {
-    var succStates: Array[(MBT, State)] = allSuccStates(null)
+    var succStates: ArrayBuffer[(MBT, State)] = allSuccStates()
     var backtracked = false
 
     while(!succStates.isEmpty) {
@@ -541,7 +525,7 @@ object Modbat {
           }
         }
       }
-      succStates = allSuccStates(null)
+      succStates = allSuccStates()
     }
   
     Log.debug("No more successors.")
