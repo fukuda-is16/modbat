@@ -81,7 +81,12 @@ class MqttClient(dest: String, clientId: String) {
   }
 
   def disconnect() = {
-    broker.disconnect(clientId)
-    isConnected = false
+    callbackHandlerThread.synchronized {
+      if (isConnected) {
+        broker.disconnect(clientId)
+        isConnected = false
+        AccSched.asNotifyAll(callbackHandlerThread)
+      }
+    }
   }
 }

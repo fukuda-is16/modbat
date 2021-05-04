@@ -65,5 +65,8 @@ object Main {
     MBT.runBefore = config.setup
     MBT.runAfter = config.cleanup
     MBT.precondAsFailure = config.precondAsFailure
+
+    import accsched.AccSched
+    AccSched.init()
   }
 }
