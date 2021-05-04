@@ -1,14 +1,16 @@
 package accsched
 
+import ASLog.debug
+
 object ASThread {
 
   def curTh: ASThread = { Thread.currentThread.asInstanceOf[ASThread] }
 
   def sleep(time: Long, real: Boolean = false) = {
-    println(s"ASThread::sleep(${time}) is called at ${AccSched.getCurrentVirtualTime()}, ${System.currentTimeMillis()}");
+    debug(s"ASThread::sleep(${time}) is called at ${AccSched.getCurrentVirtualTime()}, ${System.currentTimeMillis()}");
     val lock = new AnyRef()
     lock.synchronized { AccSched.asWaitBase(lock, time, real, Some(curTh)); }
-    println(s"ASThread::sleep(${time}) is finished at ${AccSched.getCurrentVirtualTime()}, ${System.currentTimeMillis()}");
+    debug(s"ASThread::sleep(${time}) is finished at ${AccSched.getCurrentVirtualTime()}, ${System.currentTimeMillis()}");
   }
 
   def asWait(lock: AnyRef, timeout: Long, real: Boolean = false): Unit = {

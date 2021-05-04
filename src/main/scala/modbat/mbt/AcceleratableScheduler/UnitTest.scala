@@ -2,6 +2,8 @@ package accsched
 //import accsched.AccSched
 import scala.util.Random
 
+import ASLog.debug
+
 object ScenChk { // ScenarioChecker
   val epsilon: Long = 200;
   var start_time: Long = 0;
@@ -19,14 +21,14 @@ object ScenChk { // ScenarioChecker
   }
 
   def rec(state_ : Int): Unit = {
-    println(s"ScenChk::rec: setting state ${state_}")
+    debug(s"ScenChk::rec: setting state ${state_}")
     state = state_;
     AccSched.taskNotify()
   }
 
   def observe(fnl: Boolean = false): Unit = {
     if (state == pre_state) {
-      println(s"ScenChk::observe: same state ${state}")
+      debug(s"ScenChk::observe: same state ${state}")
     }
     else {
       pre_state = state
@@ -34,16 +36,16 @@ object ScenChk { // ScenarioChecker
       val cur_scen = scenario(idx);
       val cur_vt: Long = AccSched.getCurrentVirtualTime();
       val cur_rt = System.currentTimeMillis();
-      println(s"ScenChk::observe state: ${state}; expected: ${cur_scen._1}")
-      println(s"cur_vt = ${cur_vt - start_time}, expected: ${cur_scen._2}")
-      println(s"cur_rt = ${cur_rt - start_time}, expected: ${cur_scen._3}")
+      debug(s"ScenChk::observe state: ${state}; expected: ${cur_scen._1}")
+      debug(s"cur_vt = ${cur_vt - start_time}, expected: ${cur_scen._2}")
+      debug(s"cur_rt = ${cur_rt - start_time}, expected: ${cur_scen._3}")
       assert(cur_scen._1 == state);
       assert((cur_vt - start_time - cur_scen._2).abs < epsilon);
       assert((cur_rt - start_time - cur_scen._3).abs < epsilon);
       idx += 1;
     }
     if (fnl) {
-      println(s"SchenChk::observe Final.  idx=${idx}, expected=${scenario.size}")
+      debug(s"SchenChk::observe Final.  idx=${idx}, expected=${scenario.size}")
       assert(idx == scenario.size);
     }
   }
@@ -52,11 +54,11 @@ object ScenChk { // ScenarioChecker
 object UnitTest {
   def doit() = {
     while (AccSched.taskWait()) {
-      println("before observe")
+      debug("before observe")
       ScenChk.observe();
-      println("after observe")
+      debug("after observe")
     }
-    println("before final observe")
+    debug("before final observe")
     ScenChk.observe(true);
   }
 
@@ -74,7 +76,7 @@ object UnitTest {
       test10() // ASThread::asWait
                // test11 has been cancelled.
       test12() // message sending simulation
-      println("ok")
+      debug("ok")
     }else {
       if (args(0) == "test1") { test1() }
       else if (args(0) == "test2") { test2() }
@@ -92,9 +94,13 @@ object UnitTest {
 
   // 仮想時間
   def test1() = {
-    println("=== test1 ===")
+    debug("=== test1 ===")
     AccSched.init();
-    AccSched.schedule({ ScenChk.rec(1); }, 2000);
+    AccSched.schedule({
+      debug("recording one");
+      ScenChk.rec(1);
+      debug("has recorded one");
+    }, 2000);
     AccSched.schedule({ ScenChk.rec(2); }, 1000);
 
     ScenChk.init(List((2, 1000, 0), (1, 2000, 0)));
@@ -103,7 +109,7 @@ object UnitTest {
 
   // 実時間
   def test2() = {
-    println("=== test2 ===")
+    debug("=== test2 ===")
     AccSched.init();
     AccSched.schedule({ ScenChk.rec(1); }, 2000, real = true);
     AccSched.schedule({ ScenChk.rec(2); }, 1000, real = true);
@@ -114,7 +120,7 @@ object UnitTest {
 
   // AccSched.init(false)
   def test3() = {
-    println("=== test3 ===")
+    debug("=== test3 ===")
     AccSched.init(false);
     AccSched.schedule({ ScenChk.rec(1); }, 2000);
     AccSched.schedule({ ScenChk.rec(2); }, 1000);
@@ -125,7 +131,7 @@ object UnitTest {
 
   // scheduleするタスク
   def test4() {
-    println("=== test4 ===")
+    debug("=== test4 ===")
     AccSched.init();
     AccSched.schedule({ ScenChk.rec(1); }, 1000);
     AccSched.schedule({
@@ -142,7 +148,7 @@ object UnitTest {
 
   // cancelSchedule
   def test5() = {
-    println("=== test5 ===")
+    debug("=== test5 ===")
     AccSched.init();
     val task1 = AccSched.schedule({ ScenChk.rec(1); }, 1000);
     val task2 = AccSched.schedule({ ScenChk.rec(2); }, 2000);
@@ -159,7 +165,7 @@ object UnitTest {
 
   // askRealtime / cancelRealtime
   def test6() = {
-    println("=== test6 ===")
+    debug("=== test6 ===")
     AccSched.init()
     val task1 = AccSched.schedule({ ScenChk.rec(1) }, 1000)
     val task2 = AccSched.schedule({ ScenChk.rec(2) }, 2000)
@@ -192,7 +198,7 @@ object UnitTest {
 
   // realtime schedule/cancelSchedule in tasks
   def test7() {
-    println("=== test7 ===")
+    debug("=== test7 ===")
     var taskID1 = -1
     AccSched.init()
     AccSched.schedule({ ScenChk.rec(1); }, 1000)
@@ -217,15 +223,15 @@ object UnitTest {
 
   // ASThread::sleep
   def test9() = {
-    println("=== test9 ===")
+    debug("=== test9 ===")
     class AST1 extends ASThread {
       override def run(): Unit = {
-        println("1: start sleep 10000")
+        debug("1: start sleep 10000")
         ASThread.sleep(10000);
-        println("1: slept 10000")
+        debug("1: slept 10000")
         ScenChk.rec(1)
         ASThread.sleep(500, real = true);
-        println("1: slept 500")
+        debug("1: slept 500")
         ScenChk.rec(2)
         terminate()
       }
@@ -242,27 +248,27 @@ object UnitTest {
 
   // ASThread::asWait
   def test10() = {
-    println("=== test10 ===")
+    debug("=== test10 ===")
     val lock1 = new AnyRef;
     class AST1 extends ASThread {
       override def run(): Unit = {
         lock1.synchronized {
-          println(s"AST1: step 1 lock1=${lock1}")
+          debug(s"AST1: step 1 lock1=${lock1}")
           ASThread.asWait(lock1);
           ScenChk.rec(1);
         }
         lock1.synchronized {
-          println(s"AST1: step 2 lock1=${lock1}")
+          debug(s"AST1: step 2 lock1=${lock1}")
           ASThread.asWait(lock1, 10000);
           ScenChk.rec(2);
         }
         lock1.synchronized {
-          println(s"AST1: step 3 lock1=${lock1}")
+          debug(s"AST1: step 3 lock1=${lock1}")
           ASThread.asWait(lock1, 10000);
           ScenChk.rec(3);
         }
         lock1.synchronized {
-          println(s"AST1: step 4 lock1=${lock1}")
+          debug(s"AST1: step 4 lock1=${lock1}")
           ASThread.asWait(lock1, 500, real = true);
           ScenChk.rec(4);
         }
@@ -275,17 +281,17 @@ object UnitTest {
       override def run(): Unit = {
         ASThread.sleep(1000);
         lock1.synchronized {
-          println(s"AST2: step A lock1=${lock1}")
+          debug(s"AST2: step A lock1=${lock1}")
           AccSched.asNotifyAll(lock1);
         }
         ASThread.sleep(1000);
         lock1.synchronized {
-          println(s"AST2: step B lock1=${lock1}")
+          debug(s"AST2: step B lock1=${lock1}")
           AccSched.asNotifyAll(lock1);
         }
         ASThread.sleep(1000000);
         lock1.synchronized {
-          println(s"AST2: step C lock1=${lock1}")
+          debug(s"AST2: step C lock1=${lock1}")
           AccSched.asNotifyAll(lock1);
         }
         AccSched.schedule({}, 500, real = true);
@@ -296,7 +302,7 @@ object UnitTest {
     AccSched.init();
     val t1 = new AST1;
     val t2 = new AST2;
-    println(s"t1.token=${t1.token}, t2.token=${t2.token}")
+    debug(s"t1.token=${t1.token}, t2.token=${t2.token}")
     t2.start();
     t1.start();
 
@@ -307,7 +313,7 @@ object UnitTest {
 
   // message sending simulation
   def test12() = {
-    println("=== test12 ===")
+    debug("=== test12 ===")
     
     val mainQue = scala.collection.mutable.Queue[Int]()
 
@@ -335,9 +341,9 @@ object UnitTest {
         }
       }
       def enqueMsg(t: Int): Unit = {
-        println(s"enqueMsg: enter for ${t}")
+        debug(s"enqueMsg: enter for ${t}")
         msgQue.synchronized {
-          println(s"enqueMsg: got lock for ${t}")
+          debug(s"enqueMsg: got lock for ${t}")
           msgQue += t
           AccSched.asNotifyAll(msgQue)
         }
@@ -352,7 +358,7 @@ object UnitTest {
 
     object MyCallback extends Callback {
       def messageArrived(t: Int) {
-        println(s"messageArrived: t = ${t}")
+        debug(s"messageArrived: t = ${t}")
         mainQue.synchronized { mainQue += t }
         AccSched.taskNotify()
       }

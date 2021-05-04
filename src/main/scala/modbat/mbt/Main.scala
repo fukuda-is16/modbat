@@ -4,6 +4,9 @@ import modbat.config.ConfigMgr
 import modbat.config.Version
 import modbat.log.Log
 
+import accsched.AccSched
+import accsched.ASLog
+
 object Main {
   val config = new Configuration()
 
@@ -66,7 +69,7 @@ object Main {
     MBT.runAfter = config.cleanup
     MBT.precondAsFailure = config.precondAsFailure
 
-    import accsched.AccSched
+    ASLog.setLevel(config.logLevel)
     AccSched.init()
   }
 }

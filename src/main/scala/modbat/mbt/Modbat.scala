@@ -223,8 +223,10 @@ object Modbat {
       }
       if (isErr) {
       	System.setErr(orig)
+        Log.setErr(orig)
       } else {
-	      System.setOut(orig)
+        System.setOut(orig)
+        Log.setOut(orig)
         Console.print("[2K\r")
       }
     }
@@ -287,10 +289,13 @@ object Modbat {
        logFile = Main.config.logPath + "/" + seed + ".log"
        errFile = Main.config.logPath + "/" + seed + ".err"
        if (Main.config.redirectOut) {
- 	      out = new PrintStream(new FileOutputStream(logFile))
-     	  System.setOut(out)
- 	      err = new PrintStream(new FileOutputStream(errFile), true)
-       	System.setErr(err)
+         out = new PrintStream(new FileOutputStream(logFile))
+         System.setOut(out)
+         Log.setOut(out)
+         accsched.ASLog.setOut(out)
+         err = new PrintStream(new FileOutputStream(errFile), true)
+         System.setErr(err)
+         Log.setErr(err)
        } else {
        	Console.println
        }
@@ -413,7 +418,7 @@ object Modbat {
               state.messageArrived(topic, message)
               result += Tuple2(state.model, state)
             }
-            else Log.info(s"no instance was waiting for topic $topic at state ${state.toString}")
+            else Log.debug(s"no instance was waiting for topic $topic at state ${state.toString}")
         if(!result.isEmpty) {
           return Tuple2(result, true)
         }
@@ -484,11 +489,12 @@ object Modbat {
     }
   }
   def exploreSuccessors: (TransitionResult, RecordedTransition) = {
-    var (succStates, executeAll): (ArrayBuffer[(MBT, State)], Boolean) = allSuccStates()
+    Log.debug("exploreSuccessors: debug entry")
     var endWhile = false
     while(!endWhile) {
+      var (succStates, executeAll): (ArrayBuffer[(MBT, State)], Boolean) = allSuccStates()
       while(!succStates.isEmpty) {
-        Log.info("exploreSuccessors")
+        Log.debug("exploreSuccessors: top of while loop")
         if (MBT.rng.nextFloat(false) < Main.config.abortProbability) {
           Log.debug("Aborting...")
           return (Ok(), null)
@@ -521,6 +527,7 @@ object Modbat {
         executeAll = ss._2
       }
       endWhile = !AccSched.taskWait()
+      Log.debug(s"taskWait() returns ${!endWhile}")
     }
   
     Log.debug("No more successors.")

@@ -126,7 +126,7 @@ class State (val name: String) {
   //Assign instances. If no transition is available and timeout is setted, register instances to scheduler.
   def assignInstances(n: Int) = {
     instanceNum += n
-    Log.info(s"$instanceNum instance(s) are in state ${this.toString}.")
+    Log.debug(s"$instanceNum instance(s) are in state ${this.toString}.")
     if(!availableTransitions.isEmpty) {
       assignFreeInstToTrans(n)
     } else {
@@ -186,7 +186,9 @@ class State (val name: String) {
       }
       val task = new TimeoutTask(t, n)
       Log.debug(s"registered task to execute ${t.toString} for $n instances in $time millis")
-      val taskid = AccSched.schedule(task.run(), time, real)
+      val taskid = AccSched.schedule({
+        task.execute()
+      }, time, real)
       task.taskid = taskid
       timeoutTaskIDs.synchronized {
         timeoutTaskIDs += taskid
@@ -196,9 +198,9 @@ class State (val name: String) {
 // waitingInstances -> timeoutTaskIDs (Set[taskID]) 
 // メッセージが来たら全部消す
 // 来ずにtask実行で消す
-  class TimeoutTask(t: Transition, n: Int) extends Runnable {
+  class TimeoutTask(t: Transition, n: Int) {
     var taskid: Int = -1
-    def run() {
+    def execute() {
       Log.debug(s"add timeout transition ${t.toString} to feasibleInstances")
       addFeasibleInstances(t, n)
 

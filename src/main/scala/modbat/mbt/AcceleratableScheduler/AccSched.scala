@@ -1,6 +1,7 @@
 package accsched
 
 import util.control.Breaks.{breakable, break}
+import ASLog.debug
 
 object AccSched  {
 
@@ -21,24 +22,23 @@ object AccSched  {
     override def run(): Unit = {
       localLock.synchronized {
         while (!forceTerminate) {
-          println("SchedulerThread: top")
+          debug("SchedulerThread: top")
           // 仮想時間を先に進めて良いかどうか判定し，良ければ進める
           if (enableAccelerate) {
             /*  Removing dead threads from realTimeTokens ... obsolete
-             println("SchedulerThread: checking if we can advance VT");
+             debug("SchedulerThread: checking if we can advance VT");
              realTimeTokens = realTimeTokens.filter(p => p._2 match {
              case Some(th) => th.getState != Thread.State.TERMINATED
              case _ => true
              })
              */
-            println(s"realtimeReqs = ${realtimeReqs}")
+            debug(s"realtimeReqs = ${realtimeReqs}")
             if (! realtimeReqs.someEnabled) {
               if (taskQueue.nonEmpty) {
-                val t = taskQueue.head.time
+                val t = taskQueue.head.getTime()
                 virtRealDiff += (t - getCurrentVirtualTime()) max 0
                 modified = true
-                println(s"SchedulerThread: Advanced Virtual Time: "
-                  + "virtRealDiff=${virtRealDiff}, vt=${getCurrentVirtualTime()}");
+                debug(s"SchedulerThread: Advanced Virtual Time: virtRealDiff=${virtRealDiff}")
               }
             }
           }
@@ -48,44 +48,48 @@ object AccSched  {
           var waitTime: Long = -1
           val cvt: Long = getCurrentVirtualTime()
           breakable {
-            for ( Task(t0, _, task, optToken) <- taskQueue ) {
-              if (t0 > cvt) {
-                waitTime = t0 - cvt
+            while (! taskQueue.isEmpty) {
+              val task = taskQueue.head
+            // for ( Task(t0, _, task, optToken) <- taskQueue ) {
+              if (task.getTime() > cvt) {
+                waitTime = task.getTime() - cvt
                 break
               }
               modified = true
-              println(s"SchedulerThread: executing a task")
+              debug(s"SchedulerThread: executing a task")
               taskQueue.dequeue()
-              optToken match {
+              task.getOptToken() match {
                 case Some(token) => { discardToken(token) }
                 case _ =>
               }
-              task.run()
+              debug(s"SchedulerThread: just before task.execute()")
+              task.execute()
+              debug(s"SchedulerThread: just after task.execute()")
             }
           }
 
           if (modified) {
-            println(s"SchedulerThread: notifying the owner.")
+            debug(s"SchedulerThread: notifying the owner.")
             localLock.notifyAll()
           }
           if (selfEnd) {
             finished = !modified && taskQueue.isEmpty && !realtimeReqs.someEnabled
             if (finished) {
-              println(s"SchedulerThread is terminating.")
+              debug(s"SchedulerThread is terminating.")
               localLock.notifyAll()
               return
             }
           }
           if (waitTime < 0) {
-            println(s"SchedulerThread is waiting indefinitely")
+            debug(s"SchedulerThread is waiting indefinitely")
             localLock.wait()
           }else {
-            println(s"SchedulerThread is waiting for ${waitTime} in RealTime")
+            debug(s"SchedulerThread is waiting for ${waitTime} in RealTime")
             localLock.wait(waitTime)
           }
-          println(s"SchedulerThread wakes up.")
+          debug(s"SchedulerThread wakes up.")
         }
-        println("SchedulerThread is terminating due to forceTerminate")
+        debug("SchedulerThread is terminating due to forceTerminate")
         localLock.notifyAll()
         finished = true
       }
@@ -109,14 +113,14 @@ object AccSched  {
     th.start()
   }
 
-  def schedule(task: => Unit, timeout: Long, real: Boolean = false): Int = {
+  def schedule(action: => Unit, timeout: Long, real: Boolean = false): Int = {
     localLock.synchronized {
       runcheck()
       val time: Long = getCurrentVirtualTime + timeout
       val optToken = if (real) Some(getToken()) else None
-      taskQueue += new Task(time, curTaskID, new Runnable{override def run = task}, optToken)
+      taskQueue += new Task(time, curTaskID, action, optToken)
       localLock.notifyAll();
-      println(s"AccSched::schedule(): added: taskQueue = ${taskQueue}")
+      debug(s"AccSched::schedule(): added: taskQueue = ${taskQueue}")
       curTaskID += 1
       curTaskID - 1
     }
@@ -126,27 +130,23 @@ object AccSched  {
     localLock.synchronized {
       runcheck()
       // FIXME: this is too inefficient.
-      //   Possible improvement: add "eneble" filed in Task.
+      //   Possible improvement: add "enable" filed in Task.
       //   In the Task object, make "instances" map from IDs to Task objects.
       //   taskQueue objects should also reside in the Task object.
       val oldTaskQueue = taskQueue
       taskQueue = collection.mutable.PriorityQueue[Task]()
       for ( elem <- oldTaskQueue ) {
-        elem match {
-          case Task(_, id, _, ot) => {
-            if (id == taskID) {
-              ot match {
-                case Some(token) => discardToken(token)
-                case _ =>
-              }
-            }else {
-              taskQueue += elem
-            }
+        if (elem.getTaskID() == taskID) {
+          elem.getOptToken() match {
+            case Some(token) => discardToken(token)
+            case _ =>
           }
+        }else {
+          taskQueue += elem
         }
       }
       localLock.notifyAll();
-      println(s"AccSched::cancelSchedule(): removed: taskQueue = ${taskQueue}")
+      debug(s"AccSched::cancelSchedule(): removed: taskQueue = ${taskQueue}")
     }
   }
 
@@ -169,7 +169,7 @@ object AccSched  {
     localLock.synchronized {
       runcheck()
       realtimeReqs.setValue(token, true)
-      println(s"Ask realtime ${token}: realtimeReqs = ${realtimeReqs}")
+      debug(s"Ask realtime ${token}: realtimeReqs = ${realtimeReqs}")
       localLock.notifyAll()
     }
   }
@@ -178,7 +178,7 @@ object AccSched  {
     localLock.synchronized {
       runcheck()
       realtimeReqs.setValue(token, false)
-      println(s"Cancel realtime ${token}: realtimeReqs = ${realtimeReqs}")
+      debug(s"Cancel realtime ${token}: realtimeReqs = ${realtimeReqs}")
       localLock.notifyAll()
     }
   }
@@ -190,7 +190,7 @@ object AccSched  {
   //    is to be checked with the current time.
   def asWaitBase(lock: AnyRef, timeout: Long, real: Boolean, oth: Option[ASThread]): Unit = {
     runcheck()
-    println(s"AccSched::asWaitBase is called.  lock=${lock}, timeout=${timeout}, real=${real}, oth=${oth}");
+    debug(s"AccSched::asWaitBase is called.  lock=${lock}, timeout=${timeout}, real=${real}, oth=${oth}");
     var taskID = -1;
     localLock.synchronized {
       if (timeout >= 0) {
@@ -211,7 +211,7 @@ object AccSched  {
     if (taskID >= 0) {
       AccSched.cancelSchedule(taskID)
     }
-    println(s"AccSched::asWaitBase is finished.  lock=${lock}, timeout=${timeout}, real=${real}, oth=${oth}");
+    debug(s"AccSched::asWaitBase is finished.  lock=${lock}, timeout=${timeout}, real=${real}, oth=${oth}");
   }
 
   def asWait(lock: AnyRef): Unit = { asWaitBase(lock, -1, false, None) }
@@ -219,12 +219,12 @@ object AccSched  {
   def asWait(lock: AnyRef, timeout: Long, real: Boolean = false): Unit = { asWaitBase(lock, timeout, real, None) }
 
   def asNotifyAll(lock: AnyRef): Unit = {
-    println(s"asNotifyAll is called for ${lock}")
+    debug(s"asNotifyAll is called for ${lock}")
     localLock.synchronized {
-      println(s"AccSched::asNotifyAll.  before: waitingThreads=${ASThread.waitingThreads}")
+      debug(s"AccSched::asNotifyAll.  before: waitingThreads=${ASThread.waitingThreads}")
       for ((th, lk) <- ASThread.waitingThreads)
         if (lock eq lk) { // the same object
-          println(s"asNotifyAll: realTime is being asked for ${th}")
+          debug(s"asNotifyAll: realTime is being asked for ${th}")
           askRealtime(th.token)
           ASThread.waitingThreads -= th
         }
@@ -237,22 +237,22 @@ object AccSched  {
   def taskWait(): Boolean = {
     localLock.synchronized {
       if (finished) {
-        println("taskWait: returning false immediately")
+        debug("taskWait: returning false immediately")
         return false
       }
       if (modified) {
-        println("taskWait: modified.  Immediate Returning");
+        debug("taskWait: modified.  Immediate Returning");
       }else {
-        println("taskWait: waiting")
+        debug("taskWait: waiting")
         cancelRealtime(ownerToken)
         localLock.notifyAll()
         localLock.wait()
         if (finished) {
-          println("taskWait: returning false after waking up")
+          debug("taskWait: returning false after waking up")
           return false
         }
         askRealtime(ownerToken)
-        println(s"taskWait: returning true")
+        debug(s"taskWait: returning true")
       }
       modified = false;
       return true
@@ -261,7 +261,7 @@ object AccSched  {
 
   def taskNotify(): Unit = {
     localLock.synchronized {
-      println("taskNotify is running")
+      debug("taskNotify is running")
       askRealtime(ownerToken)
       modified = true;
       localLock.notifyAll();
