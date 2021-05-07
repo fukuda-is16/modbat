@@ -15,11 +15,9 @@ object Glbl {
     }
     var idx = 0
     val scenario: Array[(Int, Long, Long)] = Array(
-        (1, 1 * min, 0),
-        (2, 2 * min, 0),
-        (3, 3 * min, 0),
-        (4, 4 * min, 0),
-        (5, 5 * min, 0)
+        (0, 2 * min, 0),
+        (0, 12 * min, 0),
+        (0, 17 * min, 0)
     )
     var state = 0
 
@@ -43,7 +41,7 @@ object Glbl {
     }
 }
 
-class Test1 extends Model {
+class Test5 extends Model {
     import Glbl._
 
     "init" -> "done" := {
@@ -54,31 +52,19 @@ class Test1 extends Model {
     }
 }
 
+
 class M1 extends Model {
     import Glbl._
 
-    var i = 1
-
-    // "S1" -> "S1" := {
-    //     publish("a", i.toString)
-    //     i += 1
-    //     if (i == 5) this.
-    // } timeout(1 * min) weight(1)
-    // "S1" -> "S2" := {
-
-    // } weight(0)
-    "S1" -> "S2" := {println("S1 -> S2"); publish("a", i.toString); i+=1} timeout(1 * min)
-    "S2" -> "S3" := {println("S2 -> S3"); publish("a", i.toString); i+=1} timeout(1 * min)
-    "S3" -> "S4" := {println("S3 -> S4"); publish("a", i.toString); i+=1} timeout(1 * min)
-    "S4" -> "S5" := {println("S4 -> S5"); publish("a", i.toString); i+=1} timeout(1 * min)
+    "S1" -> "S2" := {println("S1 -> S2"); publish("a", ".")} timeout(2 * min)
+    "S2" -> "S3" := {println("S2 -> S3"); publish("a", "fin")} timeout(15 * min)
 }
 
 class M2 extends Model {
     import Glbl._
 
-    var i = 1
-    "T1" -> "T2" := {println("T1 -> T2"); i = getMessage.toInt; rec(i); observe()} subscribe("a")
-    "T2" -> "T3" := {println("T2 -> T3"); i = getMessage.toInt; rec(i); observe()} subscribe("a")
-    "T3" -> "T4" := {println("T3 -> T4"); i = getMessage.toInt; rec(i); observe()} subscribe("a")
-    "T4" -> "T5" := {println("T4 -> T5"); i = getMessage.toInt; rec(i); observe()} subscribe("a")
+    "T1" -> "T1" := {println("T1 -> T1"); observe()} timeout(10 * min)
+    "T1" -> "T2" := {println(s"T1 -> T2, reveived ${getMessage}"); observe()} subscribe("a")
+    "T2" -> "T2" := {println("T2 -> T2"); observe()} timeout(10 * min)
+    "T2" -> "T3" := {println(s"T2 -> T3, received ${getMessage}"); observe(); assert(idx == 3); println("ok")} subscribe("a")
 }
