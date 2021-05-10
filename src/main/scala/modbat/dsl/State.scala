@@ -99,13 +99,6 @@ class State (val name: String) {
     transitions.foreach(s += _.toString + ", ")
     Log.debug(s)
   }
-  def totalWeight(trans: List[Transition]) = {
-    var w = 0.0
-    for (t <- trans) {
-      w = w + t.action.weight
-    }
-    w
-  }
 
   def subTrans(topic: String): Map[String, Transition] = {
     var m: Map[String, Transition] = Map.empty
@@ -124,12 +117,13 @@ class State (val name: String) {
   }
 
   //Assign instances. If no transition is available and timeout is setted, register instances to scheduler.
-  def assignInstances(n: Int) = {
-    instanceNum += n
+  def assignInstances(n: Int): Unit = {
     Log.debug(s"$instanceNum instance(s) are in state ${this.toString}.")
     if(!availableTransitions.isEmpty) {
+      // instanceNum is incremented in the method
       assignFreeInstToTrans(n)
     } else {
+      instanceNum += n
       timeout match {
         case Some(t) =>
           Log.debug("assign timeout")
@@ -140,22 +134,83 @@ class State (val name: String) {
       }
     }
   }
-  def assignFreeInstToTrans(n: Int) {
-    var remain = n
-    var s = "(state " + this.toString + ") availableTransitions: "
-    for(tr <- availableTransitions) {
-      s = s + tr.toString+","
+  def assignFreeInstToTrans(n: Int): Unit = {
+    // var s = "(state " + this.toString + ") availableTransitions: "
+    // for(tr <- availableTransitions) {
+    //   s = s + tr.toString+","
+    // }
+
+
+    // currently available transitions excluding those whose predicate if defined is false
+    val ts: List[Transition] = transitions.filter(
+      t => t.action.guardFunc match {
+        case Some(b) if (!b()) => false
+        case _ => true
+      }
+    )
+    val tNum = ts.size // # of available transitions
+    if (tNum == 0) {
+      // discard n instances since no transitions available
+      return
     }
-    val totalW = totalWeight(availableTransitions)
-    val rnd = scala.util.Random.shuffle(availableTransitions)
-    for(t <- rnd) {
-      val tN = (n * t.action.weight / totalW).toInt
-      if(tN > 0) {
-        addFeasibleInstances(t, tN)
-        remain = remain - tN
+    // assign n instances to transitions
+    instanceNum += n
+
+    // in the following, distributes instances to available transitions according to their weight
+    var totalWeight: Double = 0.0
+    for(t <- ts) totalWeight += t.action.weight
+    // scale up totalWeight s.t. scaled_totalWeight = scale * original_totalWeight = n
+    var scale = n.toDouble / totalWeight
+
+    // to each transition with (scaled) weight w, assign floor(w) instances
+    var rest = n // # of not-assigned instances
+    val instanceDistribution = Array.fill(tNum)(0) // # of instances to assign later for each transition
+    for((t, idx) <- ts.zipWithIndex) {
+      val scaledWeight = scale * t.action.weight
+      val num = scaledWeight.toInt
+      instanceDistribution(idx) += num
+      rest -= num
+    }
+    assert(0 <= rest && rest <= tNum)
+    
+    // for each not-assigned instance, decide their next transition randomly one by one
+    for(_ <- 1 to rest) {
+      val r = MBT.rng.nextDouble() // (0, 1)
+      val rw = r * totalWeight
+      assert(0.0 <= r && r <= 1.0)
+      // linearly search for the choice
+      import scala.util.control.Breaks.{breakable, break}
+      breakable {
+        var acc: Double = 0.0
+        for((t, idx) <- ts.zipWithIndex) {
+          acc += t.action.weight
+          if (idx + 1 == tNum || acc >= rw) {
+            // choose here
+            instanceDistribution(idx) += 1
+            break
+          }
+        }
+        // has to have break-ed in for-loop
+        assert(false)
       }
     }
-    addFeasibleInstances(rnd.head, remain)
+
+    // finally, assign instances to each transition according to instanceNum
+    for((t, idx) <- ts.zipWithIndex) {
+      val num = instanceDistribution(idx)
+      if (num > 0) addFeasibleInstances(t, num)
+    }
+
+    // val totalW = totalWeight(availableTransitions)
+    // val rnd = scala.util.Random.shuffle(availableTransitions)
+    // for(t <- rnd) {
+    //   val tN = (n * t.action.weight / totalW).toInt
+    //   if(tN > 0) {
+    //     addFeasibleInstances(t, tN)
+    //     remain = remain - tN
+    //   }
+    // }
+    // addFeasibleInstances(rnd.head, remain)
   }
 
   def assignTimeout(t:Transition, n: Int) {
