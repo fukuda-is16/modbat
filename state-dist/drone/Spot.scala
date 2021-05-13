@@ -29,7 +29,7 @@ class Spot extends Model {
     var accLoss = 0
     var loss = 0
     var start = 0.millis
-    val unit = 5 // for each 5 minutes loss may increase
+    val unit = 5 * 1000 // for each 5 minutes loss may increase
     val inc = 10 // amount of loss increase
     var sprayed = true
     // transitions

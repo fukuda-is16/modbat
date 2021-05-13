@@ -2,7 +2,7 @@ package test
 import modbat.dsl._
 
 import modbat.mbt.MBT
-
+import accsched.AccSched
 class Drone(did: Int) extends Model {
     // Spot info
     type SpotID = Int
@@ -48,11 +48,12 @@ class Drone(did: Int) extends Model {
 
     "at_spot" -> "moving" := {
         nextSpot = toSpotID(getMessage)
-        println(s"drone $did, ${MBT.time.elapsed}: head for $nextSpot")
+        println(s"drone $did, ${AccSched.getCurrentVirtualTime - X.vstartTime}, ${System.currentTimeMillis() - X.rstartTime}: head for $nextSpot")
+        //println(s"$distance(currentSpot, nextSpot")
     } subscribe(s"moveTo $did")
 
     "moving" -> "arrived" := {
-        println(s"drone $did, ${MBT.time.elapsed}: $currentSpot -> $nextSpot")
+        println(s"drone $did arrived at ${AccSched.getCurrentVirtualTime - X.vstartTime}, ${System.currentTimeMillis() - X.rstartTime}: $currentSpot -> $nextSpot")
         currentSpot = nextSpot
         // update delay
         sendDelayMin = Spot.spots(currentSpot).delayMin
@@ -65,12 +66,12 @@ class Drone(did: Int) extends Model {
         //require(currentSpot == base)
         if (currentSpot == base) {
             m_rem = m_cap
-            println(s"drone $did, ${MBT.time.elapsed}: arrived at base")
+            println(s"drone $did, ${AccSched.getCurrentVirtualTime - X.vstartTime}, ${System.currentTimeMillis() - X.rstartTime}: arrived at base")
             report()
         } else {
             //require(currentSpot != base)
             workingPlace = currentSpot
-            println(s"drone $did, ${MBT.time.elapsed}: report loss at current point")
+            println(s"drone $did, ${AccSched.getCurrentVirtualTime - X.vstartTime}, ${System.currentTimeMillis() - X.rstartTime}: report loss at current point")
             report()
         }
     }
@@ -87,5 +88,5 @@ class Drone(did: Int) extends Model {
     }
     def toSpotID(s: String): SpotID = s.toInt
 
-    def distance(spot: SpotID, nextSpot: SpotID) = Spot.distances(spot)(nextSpot)
+    def distance(spot: SpotID, nextSpot: SpotID) = Spot.distances(spot)(nextSpot) * 1000
 }

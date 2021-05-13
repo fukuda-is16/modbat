@@ -1,10 +1,18 @@
 package test
 import modbat.dsl._
 
-import modbat.testlib._
+// import modbat.testlib._
+import accsched.{ASThread, AccSched}
+
+object X {
+    var vstartTime: Long = 0
+    var rstartTime: Long = 0
+}
 
 class Test extends Model {
     val droneNum = 3
+    val controllerThread = new Controller(droneNum)
+
     "init" -> "launched" := {
         // sets up spots and launch spot models except station's one
         // station
@@ -21,8 +29,12 @@ class Test extends Model {
         }
         // 
         println("launched drones")
-        val c = new Controller(droneNum)
-        val ct = new MBTThread(c)
-        ct.start()
+        // start controller thread
+        X.vstartTime = AccSched.getCurrentVirtualTime
+        X.rstartTime = System.currentTimeMillis()
+        controllerThread.start()
     }
+    // "launched" -> "end" := {
+    //     publish("")
+    // } timeout(1000)
 }

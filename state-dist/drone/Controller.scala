@@ -1,14 +1,16 @@
 package test
 
 import modbat.mbt.mqtt_utils.client._
-import modbat.testlib.{MBTThread => Thread}
+// import modbat.testlib.{MBTThread => Thread}
+
+import accsched.ASThread
 
 sealed trait DroneState
 case object MovingToSpot extends DroneState
 case object MovingToStation extends DroneState
 case object Waiting extends DroneState
 
-class Controller(droneNum: Int) extends Runnable {
+class Controller(droneNum: Int) extends ASThread {
     // [left, right)
     val droneRange = Array.fill[(Int,Int)](droneNum)((0,0))
     // MQTT client
@@ -45,7 +47,7 @@ class Controller(droneNum: Int) extends Runnable {
         for(did <- 0 until droneNum) c.subscribe(s"report $did", 1)
     }
 
-    def run(): Unit = {
+    override def run(): Unit = {
         initDroneRange()
         initMQTT()
         import modbat.log.Log
@@ -55,7 +57,7 @@ class Controller(droneNum: Int) extends Runnable {
             println(s"init: drone $did to $loc")
             dSpot(did) = loc
         }
-        val span = /*1000 * */60 * 5 // 5 minutes
+        val span = 1000 * 60 * 5 // 5 minutes
         while(true) {
             import modbat.mbt.MBT
             import modbat.log.Log
@@ -75,11 +77,14 @@ class Controller(droneNum: Int) extends Runnable {
                 dSpot(did) = dest
             }
         }
+
+        Thread.currentThread.asInstanceOf[ASThread].terminate()
     }
 
     def waitFor(duration: Int): Unit = {
         //MBTThread.sleep(duration)
-        Thread.sleep(duration)
+        //Thread.sleep(duration)
+        ASThread.sleep(duration.toLong)
     }
 
     def moveDrone(did: Int, dest: Int): Unit = {
