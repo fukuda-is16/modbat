@@ -36,14 +36,16 @@ object Log {
     if (isLogging(level)) {
       if (errLevel <= level) {
 	err.println(msg)
+        err.flush()
       } else {
 	out.println(msg)
+        out.flush()
       }
     }
   }
 
   def debug(msg: String) = {
-    log("[DEBUG] " + msg, Debug)
+    log(s"[DEBUG] ${Thread.currentThread} " + msg, Debug)
   }
 
   def fine(msg: String) = {

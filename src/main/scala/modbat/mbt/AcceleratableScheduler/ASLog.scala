@@ -8,8 +8,6 @@ object ASLog {
 
   private var level: Int = Debug // Info
   private var out: PrintStream = Console.out
-  // withTime is effective only for debugging messages
-  private var withTime: Int = Debug
 
   def setLevel(l: Int) { level = l }
   def setOut(o: PrintStream) { out = o }
@@ -32,7 +30,7 @@ object ASLog {
     if (! isLogging(lev)) { return }
     // out.print(levelLabel(lev))
     if (isLogging(Debug)) {
-      out.print(AccSched.getCurrentVirtualTime() + " ")
+      out.print(AccSched.getCurrentVirtualTime() + " " + Thread.currentThread + " ")
     }
     out.println(msg)
     out.flush()

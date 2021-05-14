@@ -1,5 +1,8 @@
 package accsched
 
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
+
 import util.control.Breaks.{breakable, break}
 import ASLog.debug
 
@@ -8,7 +11,7 @@ object AccSched  {
   val localLock = new AnyRef
   var enableAccelerate: Boolean = true
   var selfEnd: Boolean = true
-  var virtRealDiff: Long = 0
+  @volatile var virtRealDiff: Long = 0
   var curTaskID: Int = 0
   var taskQueue = collection.mutable.PriorityQueue[Task]()
   var realtimeReqs = new RealtimeReqs()
@@ -17,6 +20,7 @@ object AccSched  {
   @volatile var started: Boolean = false
   @volatile var forceTerminate: Boolean = false
   var ownerToken: Int = -1
+  var runningTasks: Int = 0
 
   class SchedulerThread extends Thread {
     override def run(): Unit = {
@@ -55,7 +59,6 @@ object AccSched  {
                 waitTime = task.getTime() - cvt
                 break
               }
-              modified = true
               debug(s"SchedulerThread: executing a task")
               taskQueue.dequeue()
               task.getOptToken() match {
@@ -63,7 +66,17 @@ object AccSched  {
                 case _ =>
               }
               debug(s"SchedulerThread: just before task.execute()")
-              task.execute()
+              runningTasks += 1
+              debug(s"runningTasks = ${runningTasks}")
+              Future {
+                debug(s"in future")
+                task.execute()
+                localLock.synchronized {
+                  modified = true
+                  runningTasks -= 1
+                  localLock.notifyAll()
+                }
+              }
               debug(s"SchedulerThread: just after task.execute()")
             }
           }
@@ -73,7 +86,10 @@ object AccSched  {
             localLock.notifyAll()
           }
           if (selfEnd) {
-            finished = !modified && taskQueue.isEmpty && !realtimeReqs.someEnabled
+            finished = !modified &&
+                       taskQueue.isEmpty &&
+                       !realtimeReqs.someEnabled &&
+                       runningTasks == 0
             if (finished) {
               debug(s"SchedulerThread is terminating.")
               localLock.notifyAll()
@@ -194,7 +210,14 @@ object AccSched  {
     var taskID = -1;
     localLock.synchronized {
       if (timeout >= 0) {
-        taskID = schedule({lock.synchronized{AccSched.asNotifyAll(lock)}}, timeout, real);
+        taskID = schedule({
+          debug(s"lock ($lock) schedule requesting");
+          lock.synchronized{
+            debug(s"lock ($lock) schedule got");
+            AccSched.asNotifyAll(lock)
+          }
+          debug(s"lock ($lock) schedule released");
+        }, timeout, real);
       }
       oth match {
         case Some(th) => {
@@ -207,7 +230,9 @@ object AccSched  {
     // FIXME: Check if it is OK when timeout is small ... 0 or 1 or something
     //    Note that you should not call AnyRef::wait(timeout)
     //    because you need to maintain ASThread.waitingThreads
+    debug("asWaitBase.  about to wait");
     lock.wait()
+    debug("asWaitBase.  resumed from wait");
     if (taskID >= 0) {
       AccSched.cancelSchedule(taskID)
     }
@@ -270,9 +295,7 @@ object AccSched  {
 
 
   def getCurrentVirtualTime(): Long = {
-    localLock.synchronized {
-      System.currentTimeMillis() + virtRealDiff
-    }
+    System.currentTimeMillis() + virtRealDiff
   }
 
   def shutdown(): Unit = {
