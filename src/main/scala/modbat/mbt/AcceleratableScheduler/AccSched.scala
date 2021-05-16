@@ -37,7 +37,7 @@ object AccSched  {
              })
              */
             debug(s"realtimeReqs = ${realtimeReqs}")
-            if (! realtimeReqs.someEnabled) {
+            if (!modified && runningTasks == 0 && ! realtimeReqs.someEnabled) {
               if (taskQueue.nonEmpty) {
                 val t = taskQueue.head.getTime()
                 virtRealDiff += (t - getCurrentVirtualTime()) max 0

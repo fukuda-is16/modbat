@@ -494,7 +494,7 @@ object Modbat {
     while(!endWhile) {
       var (succStates, executeAll): (ArrayBuffer[(MBT, State)], Boolean) = allSuccStates()
       while(!succStates.isEmpty) {
-        Log.debug("exploreSuccessors: top of while loop")
+        Log.debug(s"exploreSuccessors: top of while loop, sccStates = ${succStates}, executeAll = ${executeAll}")
         if (MBT.rng.nextFloat(false) < Main.config.abortProbability) {
           Log.debug("Aborting...")
           return (Ok(), null)
@@ -510,12 +510,14 @@ object Modbat {
         for(successorState <- succStates) {
           val model = successorState._1
           val state = successorState._2
+          Log.debug(s"exploreSuccessors: selected: model=${model}, state=${state}");
           val fI:Map[modbat.dsl.Transition, Int] = state.feasibleInstances
           state.cancelFeasibleInstances
           for(ins <- fI) {
             val trans: Transition = ins._1
             val n: Int = ins._2
             val result = model.executeTransitionRepeat(trans, n)
+            Log.debug(s"exploreSuccessors: fI: trans=${trans}, n=${n}")
             if(TransitionResult.isErr(result._1)) {
               printTrace(executedTransitions.toList)
               return result
