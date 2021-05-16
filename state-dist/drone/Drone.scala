@@ -12,7 +12,7 @@ class Drone(did: Int) extends Model {
     var nextSpot: SpotID = 0
 
     // medicine info
-    val m_cap = 30
+    val m_cap = 30000
     var m_rem: Int = m_cap
 
     // this will be used for branching
@@ -48,7 +48,7 @@ class Drone(did: Int) extends Model {
 
     "at_spot" -> "moving" := {
         nextSpot = toSpotID(getMessage)
-        println(s"drone $did, ${AccSched.getCurrentVirtualTime - X.vstartTime}, ${System.currentTimeMillis() - X.rstartTime}: head for $nextSpot")
+        println(s"drone $did, ${AccSched.getCurrentVirtualTime - X.vstartTime}, ${System.currentTimeMillis() - X.rstartTime}: head for $nextSpot , distance = ${distance(currentSpot, nextSpot)}")
         //println(s"$distance(currentSpot, nextSpot")
     } subscribe(s"moveTo $did")
 

@@ -70,6 +70,7 @@ class Controller(droneNum: Int) extends ASThread {
                     Log.info(s"drone $did was in state ${dState(did)}")
                     //Log.info(MBT.time.elapsed, did, dState(did))
                 }
+                if (dState(did) != Waiting) println(s"failed assertion with drone $did state ${dState(did)}")
                 assert(dState(did) == Waiting)
                 val now = dSpot(did)
                 val dest = if (now + 1 == droneRange(did)._2) droneRange(did)._1 else now + 1
