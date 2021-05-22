@@ -12,7 +12,7 @@ class Drone(did: Int) extends Model {
     var nextSpot: SpotID = 0
 
     // medicine info
-    val m_cap = 30000
+    val m_cap = 30
     var m_rem: Int = m_cap
 
     // this will be used for branching
@@ -25,26 +25,19 @@ class Drone(did: Int) extends Model {
     //    var stay = t(1).toInt == 0
     //} subscribe(s"spray $did")
 
-    "at_spot" -> "moving" := {
-        val t = getMessage.toInt
-        cure(t)
-        nextSpot = 0
-        println("come back to base")
-    } subscribe(s"spray and come back $did")
+    "at_spot" -> "branch" := {
+        val t = getMessage.split(" ")
+        cure(t(0).toInt)
+        stay = t(1).toBoolean
+        // nextSpot = 0
+        // println("come back to base")
+    } subscribe(s"spray $did")
     
-    //"dummy" -> "moving" := {
-    //    println(s"drone $did: stay is $stay")
-    //} nextIf({() => stay} -> "at_spot")
-
-    //"at_Spot_next?" -> "moving" := {
-    //    //require(!stay)
-    //    nextSpot = base
-    //}
-
-    "at_spot" -> "at_spot" := {
-        val t = getMessage.toInt
-        cure(t)
-    } subscribe(s"splay and stay $did")
+    "branch" -> "at_spot" := {println(s"drone $did: stay there")} guard(!stay)
+    "branch" -> "moving" := {
+        nextSpot = 0
+        println(s"drone $did: come back to base")
+    } guard(stay)
 
     "at_spot" -> "moving" := {
         nextSpot = toSpotID(getMessage)

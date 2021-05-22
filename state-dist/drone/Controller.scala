@@ -118,13 +118,13 @@ class Controller(droneNum: Int) extends ASThread {
                     mRem(did) -= sprayAmount
                     // badness -= sprayAmount
                     if (sprayAmount < badness) {
-                        val topic = s"spray and come back $did"
-                        val message = s"${sprayAmount.toString}"
+                        val topic = s"spray $did"
+                        val message = s"${sprayAmount.toString} ${true}" // if true, tells the drone to go back to base for recharging
                         sendMessage(topic, message)
                         dState(did) = MovingToStation
                     } else {
-                        val topic = s"splay and stay $did"
-                        val message = s"${sprayAmount.toString}"
+                        val topic = s"spray $did"
+                        val message = s"${sprayAmount.toString} ${false}"
                         sendMessage(topic, message)
                         dState(did) = Waiting
                     }
