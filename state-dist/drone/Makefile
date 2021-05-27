@@ -1,10 +1,13 @@
 MODBAT_PATH := ../..
 MODBAT := $(MODBAT_PATH)/build/modbat.jar
 OPTION := -n=1 --log-path=./log --log-level=info
-MODEL := Test
+MODEL := Test2
 
-test: $(MODBAT) $(MODEL).scala
-	scalac -classpath .:$(MODBAT) Test.scala Spot.scala Drone.scala Controller.scala
+test_: $(MODBAT) $(MODEL).scala
+	#scalac -classpath .:$(MODBAT) Test.scala Spot.scala Drone.scala Controller.scala
+	scalac -classpath .:$(MODBAT) Test2.scala
+
+
 
 all:
 	cd $(MODBAT_PATH); ./gradlew build -x test

@@ -1,6 +1,6 @@
 package modbat.mbt.mqtt_utils.client
 import modbat.mbt.mqtt_utils.broker.MqttBroker
-import modbat.testlib.MBTThread
+// import modbat.testlib.MBTThread
 
 import accsched._
 
@@ -39,23 +39,27 @@ class MqttClient(dest: String, clientId: String) {
 
   class CHThread extends ASThread {
     override def run() = {
-      var topic: String = null
-      var message: MqttMessage = null
-      var endWhile = false
-      while(!endWhile) {
-        var ok = false
-        callbackHandlerThread.synchronized {
-          if (messageQueue.isEmpty) {
-            ASThread.asWait(callbackHandlerThread)
-            if (!isConnected) endWhile = false
-          } else {
-            val t = messageQueue.dequeue()
-            topic = t._1
-            message = t._2
-            ok = true
+      try {
+        var topic: String = null
+        var message: MqttMessage = null
+        var endWhile = false
+        while(!endWhile) {
+          var ok = false
+          callbackHandlerThread.synchronized {
+            if (messageQueue.isEmpty) {
+              ASThread.asWait(callbackHandlerThread)
+              if (!isConnected) endWhile = false
+            } else {
+              val t = messageQueue.dequeue()
+              topic = t._1
+              message = t._2
+              ok = true
+            }
           }
+          if (ok) callback.messageArrived(topic, message)
         }
-        if (ok) callback.messageArrived(topic, message)
+      } catch {
+        case e: InterruptedException =>
       }
     }
   }

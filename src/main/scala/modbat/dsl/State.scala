@@ -112,8 +112,12 @@ class State (val name: String) {
   }
   def reduceInstances(n: Int) = {
     instanceNum -= n
-    if(instanceNum < 0)
+    if(instanceNum < 0) {
+      val prevNum = instanceNum + n
+      Log.debug(s"(state $toString) number of instances is negative: ${prevNum}, reduce: ${n}")
+      Log.info(s"(state $toString) number of instances is negative: ${prevNum}, reduce: ${n}")
       Log.error(s"(state $toString) number of instances is negative")
+    }
   }
 
   //Assign instances. If no transition is available and timeout is setted, register instances to scheduler.

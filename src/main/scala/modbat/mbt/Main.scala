@@ -70,6 +70,5 @@ object Main {
     MBT.precondAsFailure = config.precondAsFailure
 
     ASLog.setLevel(config.logLevel)
-    AccSched.init()
   }
 }

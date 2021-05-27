@@ -8,7 +8,7 @@ object Const {
   val hour = 60 * min
 }
 
-class VC extends Model {
+class VC2 extends Model {
   import Const._
 
   "init" -> "run" := {
@@ -16,9 +16,18 @@ class VC extends Model {
     launch(user)
   }
   
-  "run" -> "waitR" := {
+  var count = 0
+  "run1" -> "waitR" := {
     publish("end","endMessage")
-  } timeout (3 * Const.hour)
+  } guard(count >= 100)
+  
+  "run1" -> "run" := {
+    count += 1
+  } guard(count < 100)
+
+  "run" -> "run1" := {
+    showDist()
+  } timeout(15 * min)
 
   // 待つだけ。実際は今の実装では要らないはず。
   "waitR" -> "end" := {
@@ -42,30 +51,53 @@ class User extends Model {
 
   "wait" -> "wait" := {
     alertCount += 1
-    assert(someMeterBroken)
+    // assert(someMeterBroken)
   } subscribe "c-alert"
 
   "wait" -> "stop" := {
+    println("aaaaaa")
+    showDist()
     assert(alertCount > 0)
   } subscribe "end"
 }
 
-class Meter(n: Int = 1) extends Model {
+class Meter(n: Int) extends Model {
   import Const._
   val watt = 1.0
-  val brokenWatt = 1000.0
+  val brokenWatt = 10000.0
 
   setInstanceNum(n)
+
   "init" -> "wait" := println("init meters")
-  "wait" -> "run" := {println("meter starts")} timeout (10 * min, 20 * min)
+  "wait" -> "run_0" := {println("meter starts")} timeout (10 * min, 20 * min)
 
-  "run" -> "break?" := {
-    println("normal meter publishing")
-    publish("m-report", watt.toString)
-  } timeout (20 * min) label "regular-report"
+  for(watt <- 0 until 100 by 10) {
+    val sfx = s"_${watt}"
+    val run = "run" + sfx
+    val break = "break?" + sfx
 
-  "break?" -> "run":= {} weight 0.9
-  "break?" -> "broken" := {} weight 0.1
+    run -> break := {
+      println("normal meter publishing" + sfx)
+      publish("m-report", watt.toString)
+    } timeout (20 * min) label ("regular-report" + sfx)
+
+    for(i <- 0 until 2) {
+      val next_watt = watt - 10 + i * 20
+      if (0 <= next_watt && next_watt < 100) break -> s"run_${next_watt}" := {}
+      if (next_watt == 100) break -> "broken" := {}
+    }
+
+    run -> "end" := {} subscribe "end"
+  }
+
+
+  // "run" -> "break?" := {
+  //   println("normal meter publishing")
+  //   publish("m-report", watt.toString)
+  // } timeout (20 * min) label "regular-report"
+
+  // "break?" -> "run":= {} weight 0.9
+  // "break?" -> "broken" := {} weight 0.1
 
   "broken" -> "broken" := {
     println("broken meter publishing")
@@ -73,7 +105,7 @@ class Meter(n: Int = 1) extends Model {
   } timeout (20 * min) // label "regular-report"
 
   // List("run", "break?", "broken") -> "end":= {} subscribe "end"
-  List("run", "broken") -> "end":= {} subscribe "end"
+  "broken" -> "end":= {} subscribe "end"
 }
 
 class Controller extends Model {
@@ -94,7 +126,7 @@ class Controller extends Model {
       println(s"controller:compare $getMessage with average(= $average)")
 
       // if(average * 100 < arrivedWatt || arrivedWatt * 100 < average) {
-      if(!(average / 100 <= arrivedWatt && arrivedWatt <= 100 * average)) {
+      if(!(average -70 <= arrivedWatt && arrivedWatt <= average + 70)) {
         publish("c-alert", "meter may be broken")
         println("controller: published alert")
       }

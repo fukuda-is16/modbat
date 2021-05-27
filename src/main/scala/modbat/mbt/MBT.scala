@@ -46,7 +46,7 @@ import modbat.trace.TransitionResult
 import modbat.util.CloneableRandom
 import modbat.util.Random
 
-import com.miguno.akka.testing.VirtualTime
+// import com.miguno.akka.testing.VirtualTime
 import scala.concurrent.duration._
 
 //import com.miguno.akka.testing.VirtualTime
@@ -80,7 +80,7 @@ object MBT {
   // do not issue same warning twice for static model problem
   var currentTransition: Transition = null
   var currentTransitionInstanceNum = 0
-  val time = new VirtualTime
+  // val time = new VirtualTime
 //  @volatile var realInst = 0 //count number of instances waiting by real time
 //  @volatile var realMillis: Long = 0
 
@@ -243,7 +243,7 @@ object MBT {
       // clear buffer of static methods again for next prepare, if needed
 
       // reset elapsed time and clear scheduled tasks if any
-      time.reset()
+      // time.reset()
     }
   }
 

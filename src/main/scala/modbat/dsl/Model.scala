@@ -147,7 +147,7 @@ abstract trait Model {
         ""
     }
   }
-  def getVirtualTime: Long = MBT.time.elapsed.toMillis
+  // def getVirtualTime: Long = MBT.time.elapsed.toMillis
   // delay setting for MQTT messaging
   // in millis
   // delay when publishing message to broker
@@ -156,4 +156,16 @@ abstract trait Model {
   // delay when receiving message from broker
   var rcvDelayMin: Int = 0
   var rcvDelayMax: Int = 0
+
+
+  // show distribution of instances
+  def showDist() = {
+    for(mbt <- MBT.launchedModels) {
+      println(mbt.className)
+      for((stateName, state) <- mbt.states) {
+        val num = state.instanceNum
+        if (num != 0) println(s"$stateName: $num")
+      }
+    }
+  }
 }

@@ -70,7 +70,7 @@ object Modbat {
   var isUnitTest = true
   //var slept = false
 
-  var currentCheckingThread: modbat.testlib.MBTThread = null
+  // var currentCheckingThread: modbat.testlib.MBTThread = null
   val cctLock = new AnyRef // this has to be acquired when touching currentCheckingThread
 
   def init {
@@ -257,6 +257,9 @@ object Modbat {
   def wrapRun = {
     Console.withErr(err) {
       Console.withOut(out) {
+        
+        AccSched.init()
+
 	      val model = MBT.launch(null)
 	      val result = exploreModel(model)
 	      MBT.cleanup()
@@ -360,52 +363,52 @@ object Modbat {
     for(s <- m.successorStates) result += Tuple2(m, s)
   }
 
-  // check whether all mbt threads are blocked
-  // if some mbt threads not blocked, wait for threads to get blocked
-  private def allThreadsBlocked(): Boolean = {
-    import modbat.testlib.MBTThread
-    val toCheck = scala.collection.mutable.ArrayBuffer[MBTThread]()
-    var allBlocked: Boolean = true;
-    // MBTThread object is also used as shared lock among all MBTThreads
-    // prepares toCheck array which is to store unblocked threads
-    MBTThread.synchronized {
-      val toRemove = scala.collection.mutable.ArrayBuffer[MBTThread]()
-      for(thd <- MBTThread.threadsToCheck) {
-        if (thd.getState == Thread.State.TERMINATED) toRemove += thd
-        else if (thd.blocked == false) {
-          allBlocked = false
-          toCheck.append(thd)
-        }
-      }
-      for(thd <- toRemove) MBTThread.threadsToCheck -= thd
-    }
-    if (allBlocked) return true
-    for(thd <- toCheck) {
-      // set current checking thread appropriately before start checking
-      cctLock.synchronized {
-        currentCheckingThread = thd
-        //println(s"updated currentCheckingThread to $currentCheckingThread")
-      }
-      // start checking and wait if necessary
-      var whileEnd = false
-      thd.synchronized {
-        while(!whileEnd) {
-          MessageHandler.mesLock.synchronized {
-            if (MessageHandler.arrivedMessages.nonEmpty) return false
-          }
-          if (thd.getState == Thread.State.TERMINATED) {
-            MBTThread.threadsToCheck -= thd
-            whileEnd = true
-          } else if (thd.blocked) {
-            whileEnd = true
-          } else {
-            thd.wait()
-          }
-        }
-      }
-    }
-    return false
-  }
+  // // check whether all mbt threads are blocked
+  // // if some mbt threads not blocked, wait for threads to get blocked
+  // private def allThreadsBlocked(): Boolean = {
+  //   import modbat.testlib.MBTThread
+  //   val toCheck = scala.collection.mutable.ArrayBuffer[MBTThread]()
+  //   var allBlocked: Boolean = true;
+  //   // MBTThread object is also used as shared lock among all MBTThreads
+  //   // prepares toCheck array which is to store unblocked threads
+  //   MBTThread.synchronized {
+  //     val toRemove = scala.collection.mutable.ArrayBuffer[MBTThread]()
+  //     for(thd <- MBTThread.threadsToCheck) {
+  //       if (thd.getState == Thread.State.TERMINATED) toRemove += thd
+  //       else if (thd.blocked == false) {
+  //         allBlocked = false
+  //         toCheck.append(thd)
+  //       }
+  //     }
+  //     for(thd <- toRemove) MBTThread.threadsToCheck -= thd
+  //   }
+  //   if (allBlocked) return true
+  //   for(thd <- toCheck) {
+  //     // set current checking thread appropriately before start checking
+  //     cctLock.synchronized {
+  //       currentCheckingThread = thd
+  //       //println(s"updated currentCheckingThread to $currentCheckingThread")
+  //     }
+  //     // start checking and wait if necessary
+  //     var whileEnd = false
+  //     thd.synchronized {
+  //       while(!whileEnd) {
+  //         MessageHandler.mesLock.synchronized {
+  //           if (MessageHandler.arrivedMessages.nonEmpty) return false
+  //         }
+  //         if (thd.getState == Thread.State.TERMINATED) {
+  //           MBTThread.threadsToCheck -= thd
+  //           whileEnd = true
+  //         } else if (thd.blocked) {
+  //           whileEnd = true
+  //         } else {
+  //           thd.wait()
+  //         }
+  //       }
+  //     }
+  //   }
+  //   return false
+  // }
 
   def allSuccStates(): (ArrayBuffer[(MBT, State)], Boolean) = {
     val result = new ArrayBuffer[(MBT, State)]()
@@ -516,6 +519,7 @@ object Modbat {
           for(ins <- fI) {
             val trans: Transition = ins._1
             val n: Int = ins._2
+            Log.debug(s"$n from ${state.instanceNum}")
             val result = model.executeTransitionRepeat(trans, n)
             Log.debug(s"exploreSuccessors: fI: trans=${trans}, n=${n}")
             if(TransitionResult.isErr(result._1)) {

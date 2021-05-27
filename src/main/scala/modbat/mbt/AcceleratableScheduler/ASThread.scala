@@ -38,11 +38,16 @@ object ASThread {
    little impact because N must be small.
    */
   var waitingThreads = scala.collection.mutable.Map[ASThread, AnyRef]()
+
+  var allThreads = scala.collection.mutable.ArrayBuffer[ASThread]()
 }
 
 
+// interruptが呼ばれたら適切に終了するように要求する。
 abstract class ASThread extends Thread {
   val token: Int = AccSched.getToken()
+
+  ASThread.allThreads += this
 
   // When the thread is terminated,
   // terminate() should be called.
