@@ -2,6 +2,7 @@ package accsched
 
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.{Success, Failure}
 
 import util.control.Breaks.{breakable, break}
 import ASLog.debug
@@ -71,16 +72,21 @@ object AccSched  {
                 debug(s"SchedulerThread: just before task.execute()")
                 runningTasks += 1
                 debug(s"runningTasks = ${runningTasks}")
-                Future {
-                  debug(s"in future")
+                val futureTaskExec: Future[Unit] = Future {
                   task.execute()
-                  localLock.synchronized {
+                }
+                futureTaskExec onComplete {
+                  case Success(u) => localLock.synchronized {
                     modified = true
                     runningTasks -= 1
                     localLock.notifyAll()
+                    debug(s"future complete; runningTasks = ${runningTasks}")
+                  }
+                  case Failure(t) => {
+                    ASLog.error("FATAL: " + t.getMessage)
+                    throw t
                   }
                 }
-                debug(s"SchedulerThread: just after task.execute()")
               }
             }
 

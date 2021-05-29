@@ -5,6 +5,7 @@ import java.io.PrintStream
 object ASLog {
   val Debug = 1
   val Info = 3
+  val Error = 5
 
   private var level: Int = Debug // Info
   private var out: PrintStream = Console.out
@@ -42,5 +43,9 @@ object ASLog {
 
   def info(msg: => String) {
     log(msg, Info)
+  }
+
+  def error(msg: => String) {
+    log(msg, Error)
   }
 }
