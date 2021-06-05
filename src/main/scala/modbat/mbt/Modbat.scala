@@ -413,6 +413,12 @@ object Modbat {
   def allSuccStates(): (ArrayBuffer[(MBT, State)], Boolean) = {
     val result = new ArrayBuffer[(MBT, State)]()
 
+    for (m <- MBT.launchedModels filterNot (_ isObserver) filter (_.joining == null)) {
+      addSuccStates(m, result)
+    }
+
+    if (result.nonEmpty) return Tuple2(result, false)
+
     MessageHandler.mesLock.synchronized {
       while(MessageHandler.arrivedMessages.nonEmpty) {
         val (state, topic, message) = MessageHandler.arrivedMessages.dequeue() // (model, topic, message) に変える
@@ -428,9 +434,6 @@ object Modbat {
       }
     }//end of mesLock.synchronize 
 
-    for (m <- MBT.launchedModels filterNot (_ isObserver) filter (_.joining == null)) {
-      addSuccStates(m, result)
-    }
     // if (result.isEmpty) {
     //   if (!allThreadsBlocked()) return allSuccStates(givenModel)
       
@@ -445,6 +448,9 @@ object Modbat {
     //   }
     // }
     // //return allSuccStates(givenModel)
+
+
+    // empty result
     Tuple2(result, false)
   }
 
@@ -514,8 +520,8 @@ object Modbat {
           val model = successorState._1
           val state = successorState._2
           Log.debug(s"exploreSuccessors: selected: model=${model}, state=${state}");
-          val fI:Map[modbat.dsl.Transition, Int] = state.feasibleInstances
-          state.cancelFeasibleInstances
+          val fI: scala.collection.mutable.Map[modbat.dsl.Transition, Int] = state.feasibleInstances.reset()
+          // state.cancelFeasibleInstances
           for(ins <- fI) {
             val trans: Transition = ins._1
             val n: Int = ins._2

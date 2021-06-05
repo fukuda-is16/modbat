@@ -53,6 +53,7 @@ object TransitionCoverage {
     t.coverage.cover
     StateCoverage.cover(t.dest)
     assert (model != null)
+    Log.info(s"moved $n instances from ${t.origin.name} to ${t.dest.name}")
     t.origin.reduceInstances(n)
     t.dest.assignInstances(n)
   }

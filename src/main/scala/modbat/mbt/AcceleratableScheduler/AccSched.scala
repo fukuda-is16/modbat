@@ -167,7 +167,8 @@ object AccSched  {
     }
   }
 
-  def cancelSchedule(taskID: Int): Unit = {
+  def cancelSchedule(taskID: Int): Boolean = {
+    var canceled = false
     localLock.synchronized {
       runcheck()
       // FIXME: this is too inefficient.
@@ -178,6 +179,7 @@ object AccSched  {
       taskQueue = collection.mutable.PriorityQueue[Task]()
       for ( elem <- oldTaskQueue ) {
         if (elem.getTaskID() == taskID) {
+          canceled = true
           elem.getOptToken() match {
             case Some(token) => discardToken(token)
             case _ =>
@@ -189,6 +191,7 @@ object AccSched  {
       localLock.notifyAll();
       debug(s"AccSched::cancelSchedule(): removed: taskQueue = ${taskQueue}")
     }
+    return canceled
   }
 
   def getToken(initVal: Boolean = true): Int = {

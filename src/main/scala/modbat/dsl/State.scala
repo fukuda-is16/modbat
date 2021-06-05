@@ -9,15 +9,47 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import accsched._
 
 class State (val name: String) {
+
+  class FeasibleInstances {
+      val lock = new AnyRef
+      var assignedInstances = scala.collection.mutable.Map[Transition, Int]()
+
+      def isEmpty: Boolean = {
+          lock.synchronized {
+              return assignedInstances.isEmpty
+          }
+      }
+      def add(t: Transition, n: Int): Unit = {
+        if (n == 0) {
+          Log.debug(s"(state $toString) no instance to add")
+          return
+        }
+        lock.synchronized {
+          assignedInstances(t) = assignedInstances.getOrElse(t, 0) + n
+          Log.debug(s"(state $toString) added ${t.toString} ($n  instances) to feasibleInstances")
+        }
+      }
+      def reset(): scala.collection.mutable.Map[Transition, Int] = {
+          lock.synchronized {
+              val ret = assignedInstances
+              assignedInstances = scala.collection.mutable.Map[Transition, Int]()
+              return ret
+          }
+      }
+  }
+
+
+
+
   override def toString = name
   var coverage: StateCoverage = _
 
   var instanceNum = 0
-  var feasibleInstances: Map[Transition, Int] = Map.empty
+  val feasibleInstances = new FeasibleInstances
   def feasible = instanceNum > 0 && !feasibleInstances.isEmpty
 
   //@volatile var waitingInstances: Map[Int, Int] = Map.empty//key: id, value: (instanceNum,disabled)
-  val timeoutTaskIDs = scala.collection.mutable.Set[Int]()
+  val timeoutTaskIDs = scala.collection.mutable.Map[Int, Int]() // holds 'taskID -> instanceNum' currently registered in task queue
 
   var freeInstanceNum = 0 //instances with no feasible transition
   var transitions: List[Transition] = List.empty
@@ -45,28 +77,36 @@ class State (val name: String) {
     timeoutId += 1
     timeoutId
   }
-  def addFeasibleInstances(t: Transition, n: Int) = {
-    if(n > 0) {
-      if(feasibleInstances.contains(t)) {
-        feasibleInstances = feasibleInstances.updated(t, feasibleInstances(t) + n)
-      } else {
-        feasibleInstances = feasibleInstances.updated(t, n)
-      }
-      Log.debug(s"(state $toString) added ${t.toString} ($n  instances) to feasibleInstances")
-    }
-    else Log.debug(s"(state $toString) no instance to add")
-  }
-  def cancelFeasibleInstances = {
-    feasibleInstances = Map.empty
-  }
+  // def addFeasibleInstances(t: Transition, n: Int) = {
+  //   if(n > 0) {
+  //     if(feasibleInstances.contains(t)) {
+  //       feasibleInstances = feasibleInstances.updated(t, feasibleInstances(t) + n)
+  //     } else {
+  //       feasibleInstances = feasibleInstances.updated(t, n)
+  //     }
+  //     Log.debug(s"(state $toString) added ${t.toString} ($n  instances) to feasibleInstances")
+  //   }
+  //   else Log.debug(s"(state $toString) no instance to add")
+  // }
+  // def cancelFeasibleInstances = {
+  //   feasibleInstances = Map.empty
+  // }
 
-  def disableTimeout(): Unit = {
+
+  // returns num of instances previously assigned to timeout transition
+  def disableTimeout(): Int = {
+    var total = 0
     timeoutTaskIDs.synchronized {
-      for(taskid <- timeoutTaskIDs) {
-        AccSched.cancelSchedule(taskid)
+      for((taskid, num) <- timeoutTaskIDs) {
+        // cancelation may fail because of race condition
+        val cancelSuccess = AccSched.cancelSchedule(taskid)
+        if (cancelSuccess) {
+          total += num
+        }
       }
       timeoutTaskIDs.clear()
     }
+    return total
   }
 
   private def availableTransitions: List[(Transition)] = transitions.filter({t => t.subTopic.isEmpty && t.waitTime.isEmpty})
@@ -124,7 +164,7 @@ class State (val name: String) {
   def assignInstances(n: Int): Unit = {
     Log.debug(s"$instanceNum instance(s) are in state ${this.toString}.")
     if(!availableTransitions.isEmpty) {
-      // instanceNum is incremented in the method
+      // instanceNum will be incremented in this method
       assignFreeInstToTrans(n)
     } else {
       instanceNum += n
@@ -199,10 +239,13 @@ class State (val name: String) {
       }
     }
 
-    // finally, assign instances to each transition according to instanceNum
+    // finally, assign instances to each transition according to instanceDistribution
     for((t, idx) <- ts.zipWithIndex) {
       val num = instanceDistribution(idx)
-      if (num > 0) addFeasibleInstances(t, num)
+      if (num > 0) {
+        Log.info(s"$num instances newly assigned to transition from ${t.origin.name} to ${t.dest.name}")
+        feasibleInstances.add(t, num)
+      }
     }
 
     // val totalW = totalWeight(availableTransitions)
@@ -240,17 +283,17 @@ class State (val name: String) {
   def registerToScheduler(t:Transition, time: Long, n: Int): Unit = {
     if(n > 0) {
       if (time <= 0) {
-        addFeasibleInstances(t, n)
+        feasibleInstances.add(t, n)
         return
       }
       val task = new TimeoutTask(t, n)
       Log.debug(s"registered task to execute ${t.toString} for $n instances in $time millis")
-      val taskid = AccSched.schedule({
-        task.execute()
-      }, time, real)
-      task.taskid = taskid
       timeoutTaskIDs.synchronized {
-        timeoutTaskIDs += taskid
+        val taskid = AccSched.schedule({
+          task.execute()
+        }, time, real)
+        task.taskid = taskid
+        timeoutTaskIDs(taskid) = n
       }
     }
   }
@@ -261,7 +304,7 @@ class State (val name: String) {
     var taskid: Int = -1
     def execute() {
       Log.debug(s"add timeout transition ${t.toString} to feasibleInstances")
-      addFeasibleInstances(t, n)
+      feasibleInstances.add(t, n)
 
       timeoutTaskIDs.synchronized {
         timeoutTaskIDs -= taskid
@@ -278,9 +321,9 @@ class State (val name: String) {
     var trans = subTopics(topic)
     Log.debug(s"(state ${this.toString} messageArrived) message arrived from topic $topic: $msg")
     //Log.debug(s"(state $toString) waitingInstanceNum = $waitingInstanceNum, freeInstanceNum = $freeInstanceNum")
-    cancelFeasibleInstances
-    disableTimeout()
-    addFeasibleInstances(trans, instanceNum)
+    // feasibleInstances.reset()
+    val num = disableTimeout()
+    feasibleInstances.add(trans, num)
     freeInstanceNum = 0
   }
 

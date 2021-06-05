@@ -6,12 +6,15 @@ object Const {
   val sec = 1000
   val min = 60 * sec
   val hour = 60 * min
+
+  // var end: Boolean = false
 }
 
 class VC2 extends Model {
   import Const._
 
   "init" -> "run" := {
+    // end = false
     val user = new User()
     launch(user)
   }
@@ -19,6 +22,7 @@ class VC2 extends Model {
   var count = 0
   "run1" -> "waitR" := {
     publish("end","endMessage")
+    // end = true
   } guard(count >= 100)
   
   "run1" -> "run" := {
@@ -83,9 +87,11 @@ class Meter(n: Int) extends Model {
 
     for(i <- 0 until 2) {
       val next_watt = watt - 10 + i * 20
-      if (0 <= next_watt && next_watt < 100) break -> s"run_${next_watt}" := {}
-      if (next_watt == 100) break -> "broken" := {}
+      if (0 <= next_watt && next_watt < 100) break -> s"run_${next_watt}" := {}// guard(!end)
+      if (next_watt == 100) break -> "broken" := {}// guard(!end)
     }
+
+    // break -> "end" := {} guard(end)
 
     run -> "end" := {} subscribe "end"
   }
@@ -103,6 +109,9 @@ class Meter(n: Int) extends Model {
     println("broken meter publishing")
     publish("m-report", brokenWatt.toString)
   } timeout (20 * min) // label "regular-report"
+
+  // "broken_2" -> "broken" := {} guard(!end)
+  // "broken_2" -> "end" := {} guard(end)
 
   // List("run", "break?", "broken") -> "end":= {} subscribe "end"
   "broken" -> "end":= {} subscribe "end"
