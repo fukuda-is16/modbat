@@ -2,7 +2,7 @@ package modbat.dsl
 
 import modbat.cov.StateCoverage
 import modbat.log.Log
-import modbat.mbt.{MBT, MessageHandler}
+import modbat.mbt.{MBT, MessageHandler, Event, EventTimeout}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -303,11 +303,20 @@ class State (val name: String) {
   class TimeoutTask(t: Transition, n: Int) {
     var taskid: Int = -1
     def execute() {
-      Log.debug(s"add timeout transition ${t.toString} to feasibleInstances")
-      feasibleInstances.add(t, n)
+      Event.put(new EventTimeout(taskid, t, n))
+    }
+  }
 
-      timeoutTaskIDs.synchronized {
+  def timeoutEffect(taskid: Int, t: Transition, n: Int): Boolean = {
+    timeoutTaskIDs.synchronized {
+      if (timeoutTaskIDs contains taskid) {
+        Log.debug(s"TimeoutTask.execute(): (${t.toString}, ${n}) to feasibleInstances")
+        feasibleInstances.add(t, n)
         timeoutTaskIDs -= taskid
+        return true
+      }else {
+        Log.debug(s"TimeoutTask.execute(): (${t.toString}, ${n}) already cancelled")
+        return false
       }
     }
   }
@@ -316,15 +325,24 @@ class State (val name: String) {
    * called when an MQTT message arrives
    * cancel timeout and assigen instances to the subscription-triggered transition
    */
-  def messageArrived(topic: String, msg: String) {
-    messageBuffer = msg
-    var trans = subTopics(topic)
-    Log.debug(s"(state ${this.toString} messageArrived) message arrived from topic $topic: $msg")
-    //Log.debug(s"(state $toString) waitingInstanceNum = $waitingInstanceNum, freeInstanceNum = $freeInstanceNum")
-    // feasibleInstances.reset()
-    val num = disableTimeout()
-    feasibleInstances.add(trans, num)
-    freeInstanceNum = 0
+  def messageEffect(topic: String, msg: String): Boolean = {
+    if (instanceNum > 0) {
+      Log.debug(s"(allSuccStates) ${instanceNum} instance(s) in ${this.toString} are subscribing $topic")
+
+      messageBuffer = msg
+      var trans = subTopics(topic)
+      Log.debug(s"(state ${this.toString} messageArrived) message arrived from topic $topic: $msg")
+      //Log.debug(s"(state $toString) waitingInstanceNum = $waitingInstanceNum, freeInstanceNum = $freeInstanceNum")
+      // feasibleInstances.reset()
+      disableTimeout()
+      // val num = disableTimeout()
+      feasibleInstances.add(trans, instanceNum)
+      freeInstanceNum = 0
+      return true
+    }else {
+      Log.debug(s"no instance was waiting for topic $topic at state ${this.toString}")
+      return false
+    }
   }
 
   def clear = {

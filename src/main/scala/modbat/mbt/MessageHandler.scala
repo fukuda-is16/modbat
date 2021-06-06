@@ -7,6 +7,9 @@ import modbat.dsl._
 import modbat.log.Log
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.collection.mutable.Map
+import scala.collection.mutable.Queue
+import scala.collection.mutable.MutableList
 
 import accsched._
 
@@ -17,25 +20,29 @@ object MessageHandler {
   val connOpts = new MqttConnectOptions()
   val timeToWait = -1
   var useMqtt = false
-  @volatile var topics: Map[String, List[State]] = Map.empty
+  val topics: Map[String, Map[MBT, MutableList[State]]] = Map.empty
   //@volatile var messages: Map[String, String] = Map.empty
   //var arrivedTopic: Set[String] = Set.empty
-  val arrivedMessages = scala.collection.mutable.Queue[(State, String, String)]() // (state, topic, message)
+  // val arrivedMessages = scala.collection.mutable.Queue[(State, String, String)]() // (state, topic, message)
+  // val arrivedMessages = Queue[(MBT, String, String)]() // (mbt, topic, message)
   val mesLock = new AnyRef
   var defaultQos = 1
 
   //subscribe topics described in test models
   def regTopic(topic: String, state: State, qos: Int = defaultQos) = {
-    if(!useMqtt) {
+    if (! useMqtt) {
       useMqtt = true
       connectMqttServer
     }
-    if(topics.contains(topic)) {
-      topics = topics + (topic -> (state :: topics(topic)))
-    } else {
-      topics = topics + (topic -> List(state))
+    val mbt = state.model
+    if (! topics.contains(topic)) {
       client.subscribe(topic, qos)
+      topics += topic -> Map.empty
     }
+    if (! topics(topic).contains(mbt)) {
+      topics(topic) += mbt -> MutableList.empty
+    }
+    topics(topic)(mbt) += state
   }
 
   def connectMqttServer = {
@@ -65,10 +72,10 @@ object MessageHandler {
       client.disconnect()
     }
     mesLock.synchronized {
-      topics = Map.empty
+      topics.clear()
       // messages = Map.empty
       // arrivedTopic = Set.empty
-      arrivedMessages.clear()
+      // arrivedMessages.clear()
     }
     useMqtt = false
     MqttBroker.reset()
@@ -93,21 +100,29 @@ object MessageHandler {
       // messages = messages + (topic -> msg)
       // arrivedTopic += topic
       // トピックを待っているモデルmodelを探索する、遅延時間delayを設定、(model, topic, message)を情報として持つようなタスクを作ってmock schedularに渡す
-      if (topics contains topic) for(state <- topics(topic)) {
-        import MBT.rng
-        val dmin = state.model.model.rcvDelayMin
-        val dmax = state.model.model.rcvDelayMax
-        val interval = dmax - dmin
-        // delay is distributed over [dmin, dmax]
-        val delay = dmin + (if (interval > 0) rng.nextInt(interval + 1) else 0)
+      // if (topics contains topic) for(state <- topics(topic)) {
 
-        if (delay > 0) {
-          AccSched.schedule({
-            mesLock.synchronized {arrivedMessages += Tuple3(state, topic, msg)}
-          }, delay.toLong)
-        } else {
-          mesLock.synchronized {arrivedMessages += Tuple3(state, topic, msg)}
+      if (topics.contains(topic)) {
+        for ((mbt, _dummy) <- topics(topic)) {
+          import MBT.rng
+          val rcvModel = mbt.getModel()
+          val dmin = rcvModel.rcvDelayMin
+          val dmax = rcvModel.rcvDelayMax
+          val interval = dmax - dmin
+          // delay is distributed over [dmin, dmax]
+          val delay = dmin + (if (interval > 0) rng.nextInt(interval + 1) else 0)
+
+          if (delay > 0) {
+            AccSched.schedule({
+              Event.put(new EventMessage(mbt, topic, msg))
+              // mesLock.synchronized {arrivedMessages += Tuple3(mbt, topic, msg)}
+            }, delay.toLong)
+          } else {
+            Event.put(new EventMessage(mbt, topic, msg))
+            // mesLock.synchronized {arrivedMessages += Tuple3(mbt, topic, msg)}
+          }
         }
+      }
 
         // import modbat.mbt.Modbat.{cctLock, currentCheckingThread}
         // if (delay > 0) MBT.time.scheduler.scheduleOnce(delay.millis){
@@ -138,7 +153,7 @@ object MessageHandler {
         //     }
         //   }
         // }
-      }
+    // }
       AccSched.taskNotify()
     }
   }

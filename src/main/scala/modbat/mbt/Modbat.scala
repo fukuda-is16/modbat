@@ -260,11 +260,12 @@ object Modbat {
         
         AccSched.init()
 
-	      val model = MBT.launch(null)
-	      val result = exploreModel(model)
-	      MBT.cleanup()
+	val model = MBT.launch(null)
+	val result = exploreModel(model)
+	MBT.cleanup()
         MessageHandler.clear()
-	      result
+        Event.clear()
+	result
       }
     }
   }
@@ -357,12 +358,6 @@ object Modbat {
     retVal
   }
 
-  def addSuccStates(m: MBT, result: ArrayBuffer[(MBT, State)]) {
-    //TODO: print log if !quiet 
-    //TODO: support loop detection (as supported in addSuccessors)
-    for(s <- m.successorStates) result += Tuple2(m, s)
-  }
-
   // // check whether all mbt threads are blocked
   // // if some mbt threads not blocked, wait for threads to get blocked
   // private def allThreadsBlocked(): Boolean = {
@@ -410,50 +405,14 @@ object Modbat {
   //   return false
   // }
 
-  def allSuccStates(): (ArrayBuffer[(MBT, State)], Boolean) = {
-    val result = new ArrayBuffer[(MBT, State)]()
+  def allSuccStates(): ArrayBuffer[State] = {
+    val result = new ArrayBuffer[State]()
 
     for (m <- MBT.launchedModels filterNot (_ isObserver) filter (_.joining == null)) {
-      addSuccStates(m, result)
+      for(s <- m.successorStates) result += s
     }
-
-    if (result.nonEmpty) return Tuple2(result, false)
-
-    MessageHandler.mesLock.synchronized {
-      while(MessageHandler.arrivedMessages.nonEmpty) {
-        val (state, topic, message) = MessageHandler.arrivedMessages.dequeue() // (model, topic, message) に変える
-            if(state.instanceNum > 0) {
-              Log.debug(s"(allSuccStates) ${state.instanceNum} instance(s) in ${state.toString} are subscribing $topic")
-              state.messageArrived(topic, message)
-              result += Tuple2(state.model, state)
-            }
-            else Log.debug(s"no instance was waiting for topic $topic at state ${state.toString}")
-        if(!result.isEmpty) {
-          return Tuple2(result, true)
-        }
-      }
-    }//end of mesLock.synchronize 
-
-    // if (result.isEmpty) {
-    //   if (!allThreadsBlocked()) return allSuccStates(givenModel)
-      
-    //   // move time forward
-    //   return MBT.time.scheduler.timeUntilNextTask match {
-    //     case Some(s) => {
-    //       Log.info(s"advances virtual time by $s from ${MBT.time.elapsed}")
-    //       MBT.time.advance(s)
-    //       allSuccStates(givenModel)
-    //     }
-    //     case None => Array.empty
-    //   }
-    // }
-    // //return allSuccStates(givenModel)
-
-
-    // empty result
-    Tuple2(result, false)
+    return result
   }
-
 
   def updateExecHistory(model: MBT,
 			localStoredRNGState: CloneableRandom,
@@ -497,49 +456,69 @@ object Modbat {
       }
     }
   }
+
+  /*
+   exploreSuccessors() is the main part of the Modbat main loop.
+   The procedure is as follows:
+   - If there are feasible transitions, select one of them and execute it.
+   - If there are none,
+     - Take an Event from the Event queu.  It is either an EventMessage or EventTimeout.
+     - If it is an EventMessage(mbt, topic, msg):
+       - ALL THE TRANSITIONS within mbt that wait for topic become feasible.
+         The number of instances assigned is state.instanceNum, i.e., all of instances in the
+         state are assigned; even if the timeout operation for some of the instances are
+         taking place in another thread.
+     - If it is an EventTimeout(taskid, trans, n):
+       - If taskid still exists in timeoutTaskIDs, make trans feasible with instance number n.
+       - Otherwise, do nothing
+   Note that Event objects are created in other threads.  It is dangerous to make transitions
+   feasible in other threads.  Thus, they only create Event objects, and the tasks of 
+   changing transitions feasible are only done in the Modbat main loop.  
+   Also note that changing ALL TRANSITIONS in a model at once is important.  Otherwise, if
+   a timeout transition s1->s2 and message transitions s1->t and s2->t are in race, an 
+   instance in s1 may miss a message.
+
+   */
   def exploreSuccessors: (TransitionResult, RecordedTransition) = {
     Log.debug("exploreSuccessors: debug entry")
-    var endWhile = false
-    while(!endWhile) {
-      var (succStates, executeAll): (ArrayBuffer[(MBT, State)], Boolean) = allSuccStates()
-      while(!succStates.isEmpty) {
-        Log.debug(s"exploreSuccessors: top of while loop, sccStates = ${succStates}, executeAll = ${executeAll}")
-        if (MBT.rng.nextFloat(false) < Main.config.abortProbability) {
-          Log.debug("Aborting...")
-          return (Ok(), null)
-        }
-        if(executeAll) {
-          Log.debug("execute all transitions with subscription")
-        } else {
+    var contMain = true
+    while(contMain) {
+      var contEvent = true
+      while (contEvent) {
+        var succStates: ArrayBuffer[State] = allSuccStates()
+        while(!succStates.isEmpty) {
+          Log.debug(s"exploreSuccessors: top of while loop, sccStates = ${succStates}")
+          if (MBT.rng.nextFloat(false) < Main.config.abortProbability) {
+            Log.debug("Aborting...")
+            return (Ok(), null)
+          }
           val rand = new Random(System.currentTimeMillis())
           val randN = rand.nextInt(succStates.length)
           //val successorState:(MBT, State) = succStates(rand.nextInt(succStates.length))
           succStates = succStates.slice(randN, randN + 1)
-        }
-        for(successorState <- succStates) {
-          val model = successorState._1
-          val state = successorState._2
-          Log.debug(s"exploreSuccessors: selected: model=${model}, state=${state}");
-          val fI: scala.collection.mutable.Map[modbat.dsl.Transition, Int] = state.feasibleInstances.reset()
-          // state.cancelFeasibleInstances
-          for(ins <- fI) {
-            val trans: Transition = ins._1
-            val n: Int = ins._2
-            Log.debug(s"$n from ${state.instanceNum}")
-            val result = model.executeTransitionRepeat(trans, n)
-            Log.debug(s"exploreSuccessors: fI: trans=${trans}, n=${n}")
-            if(TransitionResult.isErr(result._1)) {
-              printTrace(executedTransitions.toList)
-              return result
+          for(state <- succStates) {
+            val model = state.model
+            Log.debug(s"exploreSuccessors: selected: model=${model}, state=${state}");
+            val fI: scala.collection.mutable.Map[modbat.dsl.Transition, Int] = state.feasibleInstances.reset()
+            // state.cancelFeasibleInstances
+            for(ins <- fI) {
+              val trans: Transition = ins._1
+              val n: Int = ins._2
+              Log.debug(s"exploreSuccessors: $n from ${state.instanceNum}")
+              val result = model.executeTransitionRepeat(trans, n)
+              Log.debug(s"exploreSuccessors: fI: trans=${trans}, n=${n}")
+              if(TransitionResult.isErr(result._1)) {
+                printTrace(executedTransitions.toList)
+                return result
+              }
             }
           }
+          succStates = allSuccStates()
         }
-        val ss = allSuccStates()
-        succStates = ss._1
-        executeAll = ss._2
+        contEvent = Event.processOne()
       }
-      endWhile = !AccSched.taskWait()
-      Log.debug(s"taskWait() returns ${!endWhile}")
+      contMain = AccSched.taskWait()
+      Log.debug(s"taskWait() returns ${!contMain}")
     }
   
     Log.debug("No more successors.")
